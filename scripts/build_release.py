@@ -11,7 +11,7 @@ from zip_utils import add_zip_engine_argument, describe_zip_engine, write_zip
 
 
 RLS_INFO_PATH = "mod_info/RLSCO24/info.json"
-PATCH_VERSION = "v1.0.0-beta.18"
+PATCH_VERSION = "v1.0.0-beta.19"
 
 RLS_REMOVE_PREFIXES = (
     # RLS 2.6.x ships a legacy minimap app override that can remain in the

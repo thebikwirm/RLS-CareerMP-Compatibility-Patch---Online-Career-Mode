@@ -15,7 +15,7 @@ If a server owner, friend, or Discord post already gave you these finished files
 - `CareerMPPartySharedVehicles.zip`
 - `rls_RaceTab_Release.zip`
 - `CareerMP-Tablet-0.0.5.zip`
-- `rls_career_overhaul_2.6.6_careermp_compatible.zip`
+- `rls_career_overhaul_2.6.7_careermp_compatible.zip`
 
 then you can skip the Python part completely.
 
@@ -29,10 +29,10 @@ If someone already gave you the finished compatible files:
 - `CareerMPPartySharedVehicles.zip`
 - `rls_RaceTab_Release.zip`
 - `CareerMP-Tablet-0.0.5.zip`
-- `rls_career_overhaul_2.6.6_careermp_compatible.zip`
+- `rls_career_overhaul_2.6.7_careermp_compatible.zip`
 
 2. Do **not** also install:
-- `rls_career_overhaul_2.6.6.zip`
+- `rls_career_overhaul_2.6.7.zip`
 - `RLS_2.6.4_MPv3.8.zip`
 
 3. Launch BeamNG / BeamMP and join the server.
@@ -50,7 +50,7 @@ For a normal West Coast setup, the server should use:
 - `CareerMPPartySharedVehicles.zip`
 - `rls_RaceTab_Release.zip`
 - `CareerMP-Tablet-0.0.5.zip`
-- `rls_career_overhaul_2.6.6_careermp_compatible.zip`
+- `rls_career_overhaul_2.6.7_careermp_compatible.zip`
 
 Use only the compatible RLS zip, not the original RLS zip.
 
@@ -68,7 +68,7 @@ The current compatibility update bundles two fixes together:
 - the traffic-disable fix for servers that want `roadTrafficEnabled=false` / `parkedTrafficEnabled=false`
 - the workshop compatibility fix for tune and part-shopping flows that could otherwise leave the player vehicle in AI traffic or break recovery / taxi
 - the multiplayer camera, drag, parcel delivery, and grey-orb fixes
-- the beta18 manual queue/resync fix, cargo fail-safe unfreeze, drag abort cleanup, save-timing guard, RaceTab/Tablet bundle, BeamMP load-order guard, and visible UI version marker
+- the beta19 manual queue/resync fix, cargo fail-safe unfreeze, drag abort cleanup, save-timing guard, RaceTab/Tablet bundle, BeamMP load-order guard, and visible UI version marker
 
 Because those fixes are split between both generated files, update both zips together.
 
@@ -78,27 +78,35 @@ You only need this section if you do **not** already have the finished compatibl
 
 You will need:
 
-- the original `rls_career_overhaul_2.6.6.zip`
+- the original `rls_career_overhaul_2.6.7.zip`
 - the original `CareerMP_v0.0.37.zip`
 - Python installed on Windows
 
 `CareerMP_v0.0.37.zip` can be the full package with `Resources\Client\CareerMP.zip` inside. The builder extracts the client zip automatically.
 
+Useful URLs:
+
+- RLS public releases: https://github.com/RLS-Modding/rls_career_overhaul/releases
+- CareerMP v0.0.37 package: https://github.com/StanleyDudek/CareerMP/releases/download/v0.0.37/CareerMP_v0.0.37.zip
+- This compatibility project releases: https://github.com/ChiarelloB/RLS-CareerMP-Compatibility-Patch---Online-Career-Mode/releases
+
+Note: GitHub's public RLS release feed still reports `v2.6.5` as latest on 2026-06-22. If you are building the `2.6.7` compatible package, use your current original `rls_career_overhaul_2.6.7.zip` from the RLS distribution source you already have access to.
+
 Then run:
 
 ```powershell
-python .\scripts\build_release.py --rls-original "C:\path\to\rls_career_overhaul_2.6.6.zip" --careermp-original "C:\path\to\CareerMP_v0.0.37.zip" --out-dir ".\built"
+python .\scripts\build_release.py --rls-original "C:\path\to\rls_career_overhaul_2.6.7.zip" --careermp-original "C:\path\to\CareerMP_v0.0.37.zip" --out-dir ".\built"
 ```
 
 If `python` does not work, try:
 
 ```powershell
-py .\scripts\build_release.py --rls-original "C:\path\to\rls_career_overhaul_2.6.6.zip" --careermp-original "C:\path\to\CareerMP_v0.0.37.zip" --out-dir ".\built"
+py .\scripts\build_release.py --rls-original "C:\path\to\rls_career_overhaul_2.6.7.zip" --careermp-original "C:\path\to\CareerMP_v0.0.37.zip" --out-dir ".\built"
 ```
 
 The script will create:
 
-- `built\rls_career_overhaul_2.6.6_careermp_compatible.zip`
+- `built\rls_career_overhaul_2.6.7_careermp_compatible.zip`
 - `built\CareerMP.zip`
 
 ## Add-on Maps
@@ -112,7 +120,7 @@ That means:
 - `CareerMPPartySharedVehicles.zip`
 - `rls_RaceTab_Release.zip`
 - `CareerMP-Tablet-0.0.5.zip`
-- `rls_career_overhaul_2.6.6_careermp_compatible.zip`
+- `rls_career_overhaul_2.6.7_careermp_compatible.zip`
 - the RLS add-on map zip you want to use
 
 Example:
@@ -132,7 +140,7 @@ It needs:
 - `CareerMPPartySharedVehicles.zip`
 - `rls_RaceTab_Release.zip`
 - `CareerMP-Tablet-0.0.5.zip`
-- `rls_career_overhaul_2.6.6_careermp_compatible.zip`
+- `rls_career_overhaul_2.6.7_careermp_compatible.zip`
 - `River_Highway_Rework_PHI.zip`
 - `rls_career_overhaul_river_highway_beta_0.0.5_careermp_delta.zip`
 
@@ -163,7 +171,7 @@ Open the CareerMP player list in-game.
 The newest build should show:
 
 ```text
-RLS CareerMP Patch v1.0.0-beta.18
+RLS CareerMP Patch v1.0.0-beta.19
 ```
 
 If you do not see that marker, your client is probably still using old cached files.
@@ -177,7 +185,7 @@ Fix:
 
 Also important:
 
-- vehicle queue/sync actions are manual in beta18
+- vehicle queue/sync actions are manual in beta19
 - right-click a player and use `Queue Events` only when you actually want to apply queued vehicle changes
 - right-click a player and use `Force Re-Sync Vehicles` if their remote vehicles are stuck/desynced after a leave, crash, or reconnect
 - do not expect queued changes to auto-apply while someone is driving
@@ -188,7 +196,7 @@ Also important:
 - Thinking Python is required even when the finished compatible files are already provided.
 - Using old `2.6.4` multiplayer RLS files together with the new compatible build.
 - Forgetting `CareerMPBanking.zip`, `CareerMPPartySharedVehicles.zip`, `rls_RaceTab_Release.zip`, or `CareerMP-Tablet-0.0.5.zip`.
-- Not checking the `RLS CareerMP Patch v1.0.0-beta.18` marker after updating.
+- Not checking the `RLS CareerMP Patch v1.0.0-beta.19` marker after updating.
 - For River Highway, installing the original old River RLS beta together with the generated River delta.
 
 ## If Something Still Does Not Work
@@ -203,7 +211,7 @@ Check these first:
 - If traffic is supposed to be off, did you replace both generated zips and not only `CareerMP.zip`?
 - If tune, recovery, or taxi still breaks after a workshop change, did you replace both generated zips and not only one of them?
 - If speed cameras, drag jobs, Alder aborts, parcel delivery, or grey player/parked-car orbs still happen, did you replace both generated zips from the newest build?
-- If old UI, missing force resync, instant vehicle sync, or `MPCoreNetwork.getLoginState()` fatal errors still happen, does the CareerMP player list show `RLS CareerMP Patch v1.0.0-beta.18`?
+- If old UI, missing force resync, instant vehicle sync, or `MPCoreNetwork.getLoginState()` fatal errors still happen, does the CareerMP player list show `RLS CareerMP Patch v1.0.0-beta.19`?
 - If players desync after someone leaves/crashes, did the server owner run `scripts\apply_server_hotfix.py` on the BeamMP server folder?
 - If traffic is still wrong on a server, is `autoUpdate` turned off in the CareerMP server config?
 

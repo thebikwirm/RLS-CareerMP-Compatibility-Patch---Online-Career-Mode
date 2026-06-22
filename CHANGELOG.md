@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.0-beta.19
+
+### Changed
+
+- Rebased the compatibility builder and documentation for `RLS Career Overhaul 2.6.7` and `CareerMP v0.0.37`.
+- The generated compatible RLS zip is now `rls_career_overhaul_2.6.7_careermp_compatible.zip`.
+- Updated the visible CareerMP player-list marker to `RLS CareerMP Patch v1.0.0-beta.19`.
+
+### Notes
+
+- The public RLS GitHub release feed still reports `v2.6.5` as latest on 2026-06-22, so builders targeting `2.6.7` must provide their own original `rls_career_overhaul_2.6.7.zip` archive from the current RLS distribution source.
+- The existing online compatibility fixes from beta18 are preserved.
+
 ## v1.0.0-beta.18
 
 ### Changed
