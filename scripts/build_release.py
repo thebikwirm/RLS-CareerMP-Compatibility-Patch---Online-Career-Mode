@@ -128,91 +128,105 @@ def patch_rls_039_save_api(entries: dict[str, bytes]) -> None:
 
 
 def patch_rls_039_player_attributes(entries: dict[str, bytes]) -> None:
-    """Make RLS playerAttributes safe during CareerMP's pre-profile startup window.
+    """Make old RLS playerAttributes safe during CareerMP 0.39 career activation.
 
-    In BeamNG 0.39, CareerMP can load RLS gameplay extensions before a profile is
-    selected. Older RLS playerAttributes versions leave the local attributes
-    table nil when career_career is not active yet, while modules such as
-    BeamEats and loans may already query it.
-
-    Current RLS avoids this by initializing the table before the career-active
-    early return and by treating pre-init reads as zero. Apply the same narrow
-    behavior to the input RLS archive without replacing the whole module.
+    RLS packages can contain either the vanilla-path copy or the override-path
+    copy (or both), depending on release/build layout. Patch every copy present.
     """
 
-    path = "lua/ge/extensions/overrides/career/modules/playerAttributes.lua"
-    payload = entries.get(path)
-    if not payload:
-        print("BeamNG 0.39 playerAttributes patch: source file not present")
-        return
+    candidate_paths = [
+        "lua/ge/extensions/career/modules/playerAttributes.lua",
+        "lua/ge/extensions/overrides/career/modules/playerAttributes.lua",
+    ]
 
-    text = payload.decode("utf-8")
-    changed = False
+    patched_paths = []
 
-    old_loaded = """local function onExtensionLoaded()
-  if not career_career.isActive() then return false end
-"""
-    new_loaded = """local function onExtensionLoaded()
-  if not attributes then
-    init()
-  end
-  if not career_career.isActive() then return false end
-"""
-    if old_loaded in text:
-        text = text.replace(old_loaded, new_loaded, 1)
-        changed = True
-    elif "local function onExtensionLoaded()\n  if not attributes then\n    init()\n  end\n" not in text:
-        raise RuntimeError(
-            f"Unable to patch RLS playerAttributes startup guard in {path}; source file layout changed."
+    for path in candidate_paths:
+        payload = entries.get(path)
+        if not payload:
+            continue
+
+        text = payload.decode("utf-8")
+        original = text
+
+        # Ensure the backing tables exist before any career-load callback can
+        # query or mutate them.
+        text = re.sub(
+            r"local\s+attributes\s*(?:=\s*nil)?\s*\n",
+            "local attributes = {}\n",
+            text,
+            count=1,
+        )
+        text = re.sub(
+            r"local\s+attributeLog\s*(?:=\s*nil)?\s*\n",
+            "local attributeLog = {}\n",
+            text,
+            count=1,
         )
 
-    getter_pattern = re.compile(
-        r"local function getAttributeValue\(attributeName\)\s*\n"
-        r"(?P<body>.*?)"
-        r"\nend",
-        re.DOTALL,
-    )
-    match = getter_pattern.search(text)
-    if not match:
-        raise RuntimeError(
-            f"Unable to locate getAttributeValue in {path}; source file layout changed."
+        # Old 2.6.x builds dereference attributes directly here. Guard both
+        # getter functions regardless of whitespace/body differences.
+        getter_value = re.compile(
+            r"local function getAttributeValue\(attributeName\)\s*\n.*?\nend",
+            re.DOTALL,
         )
-
-    safe_getter = """local function getAttributeValue(attributeName)
+        if getter_value.search(text):
+            text = getter_value.sub(
+                """local function getAttributeValue(attributeName)
   if not attributes then
     return 0
   end
   return (attributes[attributeName] or baseAttribute).value
-end"""
+end""",
+                text,
+                count=1,
+            )
 
-    existing_getter = match.group(0)
-    if existing_getter != safe_getter:
-        text = text[:match.start()] + safe_getter + text[match.end():]
-        changed = True
-
-    get_attr_pattern = re.compile(
-        r"local function getAttribute\(attributeName\)\s*\n"
-        r"(?P<body>.*?)"
-        r"\nend",
-        re.DOTALL,
-    )
-    match = get_attr_pattern.search(text)
-    if match:
-        safe_get_attr = """local function getAttribute(attributeName)
+        getter = re.compile(
+            r"local function getAttribute\(attributeName\)\s*\n.*?\nend",
+            re.DOTALL,
+        )
+        if getter.search(text):
+            text = getter.sub(
+                """local function getAttribute(attributeName)
   if not attributes then
     return nil
   end
   return attributes[attributeName]
-end"""
-        if match.group(0) != safe_get_attr:
-            text = text[:match.start()] + safe_get_attr + text[match.end():]
-            changed = True
+end""",
+                text,
+                count=1,
+            )
 
-    entries[path] = text.encode("utf-8")
-    print(
-        "BeamNG 0.39 playerAttributes patch: "
-        + ("applied pre-profile initialization/read guards" if changed else "already present")
-    )
+        # Some old builds return early from onExtensionLoaded before init().
+        # Move/init the table first when that exact old pattern is present.
+        text = text.replace(
+            """local function onExtensionLoaded()
+  if not career_career.isActive() then return false end
+""",
+            """local function onExtensionLoaded()
+  if not attributes then
+    init()
+  end
+  if not career_career.isActive() then return false end
+""",
+            1,
+        )
+
+        if text != original:
+            entries[path] = text.encode("utf-8")
+            patched_paths.append(path)
+
+    if not patched_paths:
+        raise RuntimeError(
+            "BeamNG 0.39 playerAttributes compatibility patch did not modify any "
+            "RLS playerAttributes.lua copy; source layout changed."
+        )
+
+    print("BeamNG 0.39 playerAttributes guards applied:")
+    for path in patched_paths:
+        print(f"  - {path}")
+
 
 
 def patch_rls_online_save_timing(entries: dict[str, bytes]) -> None:
