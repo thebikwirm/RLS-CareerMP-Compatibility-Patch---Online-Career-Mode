@@ -8,3 +8,4 @@ release/*.zip
 release/HOW_TO_INSTALL_*.txt
 release/checksums-*.txt
 *.vsidx
+*.vs
