@@ -54,6 +54,14 @@ def main() -> int:
             "and RLS compatibility zip are copied to Resources/Client automatically."
         ),
     )
+    parser.add_argument(
+        "--rls-install-name",
+        default=None,
+        help=(
+            "Optional filename to use for the installed RLS zip in Resources/Client. "
+            "Useful for overwriting an existing server resource name."
+        ),
+    )
     add_zip_engine_argument(parser)
     args = parser.parse_args()
 
@@ -115,16 +123,32 @@ def main() -> int:
         resources_client = server_root / "Resources" / "Client"
         resources_client.mkdir(parents=True, exist_ok=True)
 
-        installed_rls = resources_client / rls_out.name
+        install_name = args.rls_install_name or rls_out.name
+        installed_rls = resources_client / install_name
         installed_careermp = resources_client / "CareerMP.zip"
 
         shutil.copy2(rls_out, installed_rls)
         shutil.copy2(careermp_out, installed_careermp)
 
+        installed_rls_hash = sha256sum(installed_rls)
+        installed_cmp_hash = sha256sum(installed_careermp)
+
+        if installed_rls_hash != rls_hash:
+            raise SystemExit(
+                "RLS install verification failed: installed hash does not match built zip"
+            )
+        if installed_cmp_hash != cmp_hash:
+            raise SystemExit(
+                "CareerMP install verification failed: installed hash does not match source zip"
+            )
+
         print("")
         print("Installed to BeamMP server:")
         print(f"  {installed_rls}")
         print(f"  {installed_careermp}")
+        print("")
+        print(f"Verified RLS SHA256:      {installed_rls_hash}")
+        print(f"Verified CareerMP SHA256: {installed_cmp_hash}")
         print("")
         print("NOTE: remove any older/original RLS career overhaul zip from Resources/Client")
         print("      so only the generated *_careermp039_compatible.zip is active.")
