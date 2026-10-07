@@ -88,6 +88,44 @@ def replace_required_unless(text: str, old: str, new: str, path: str, label: str
     return replace_required(text, old, new, path, label)
 
 
+def patch_rls_039_save_api(entries: dict[str, bytes]) -> None:
+    """Route legacy RLS save-slot lookups through the CareerMP 0.39 bridge.
+
+    BeamNG 0.39 renamed getCurrentSaveSlot() to getCurrentProfile().  The
+    compatibility bridge prefers CareerMP's own mapping and falls back to the
+    native 0.39 API.  Patch the original RLS archive at build time so modules
+    such as credit.lua and propertyOwners.lua do not call a missing function.
+    """
+
+    old = "career_saveSystem.getCurrentSaveSlot("
+    new = "overhaul_careermp39Compat.getCurrentProfile("
+    patched_files: list[str] = []
+
+    for name, payload in list(entries.items()):
+        if not name.lower().endswith(".lua"):
+            continue
+
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+
+        if old not in text:
+            continue
+
+        count = text.count(old)
+        text = text.replace(old, new)
+        entries[name] = text.encode("utf-8")
+        patched_files.append(f"{name} ({count})")
+
+    if patched_files:
+        print("BeamNG 0.39 save-profile rewrites:")
+        for item in patched_files:
+            print(f"  - {item}")
+    else:
+        print("BeamNG 0.39 save-profile rewrites: no legacy getCurrentSaveSlot calls found")
+
+
 def patch_rls_online_save_timing(entries: dict[str, bytes]) -> None:
     """Defer event-completion saves that desync online jobs and freeroam events.
 
@@ -605,6 +643,7 @@ def patch_careermp_entries(entries: dict[str, bytes]) -> None:
 def patch_rls_entries(entries: dict[str, bytes], output_name: str) -> None:
     """Keep BeamNG mod metadata aligned with the generated compatibility zip."""
 
+    patch_rls_039_save_api(entries)
     patch_rls_online_save_timing(entries)
 
     override_manager_path = "lua/ge/extensions/overhaul/overrideManager.lua"
