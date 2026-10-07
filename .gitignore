@@ -10,3 +10,4 @@ release/checksums-*.txt
 *.vsidx
 *.vs
 /build.bat
+/build.bat
