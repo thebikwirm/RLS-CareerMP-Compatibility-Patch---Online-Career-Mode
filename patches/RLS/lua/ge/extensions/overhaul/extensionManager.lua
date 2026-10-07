@@ -37,7 +37,12 @@ end
 -- freeroam drag events and tuning shop drag jobs use that runtime path.
 local function loadExtensions()
 
-    extensions.unload("freeroam_freeroam")
+    -- BeamNG 0.39's career/mission stack expects the normal freeroam and
+    -- traffic dependency graph to remain intact. Older RLS builds tore this
+    -- down and rebuilt it around their copied career implementation.
+    if not isCareerMP39() then
+        extensions.unload("freeroam_freeroam")
+    end
     -- BeamNG 0.39 career depends on core_recoveryPrompt. Older RLS/CareerMP
     -- compatibility builds unloaded it, which can leave career_career with an
     -- unresolved dependency during multiplayer startup.
@@ -45,7 +50,9 @@ local function loadExtensions()
         extensions.unload("core_recoveryPrompt")
     end
 
-    setExtensionUnloadMode("gameplay_drag_dragTypes_dragPracticeRace", "manual")
+    if not isCareerMP39() then
+        setExtensionUnloadMode("gameplay_drag_dragTypes_dragPracticeRace", "manual")
+    end
     setExtensionUnloadMode("gameplay_events_freeroamEvents", "manual")
     setExtensionUnloadMode("gameplay_phone", "manual")
     setExtensionUnloadMode("gameplay_repo", "manual")
@@ -86,6 +93,28 @@ local function loadExtensionIfNeeded(extensionName)
     end
 
     pcall(extensions.load, extensionName)
+end
+
+local function ensureCareerMP39CoreRuntime()
+    if not isCareerMP39() then
+        return
+    end
+
+    -- Keep BeamNG's native 0.39 dependency chain alive. RLS modules such as
+    -- police, missions and career all assume gameplay_traffic remains present.
+    local coreExtensions = {
+        "gameplay_parking",
+        "gameplay_police",
+        "gameplay_taxi",
+        "gameplay_traffic",
+        "core_recoveryPrompt",
+        "career_saveSystem",
+        "career_career",
+    }
+
+    for _, extensionName in ipairs(coreExtensions) do
+        loadExtensionIfNeeded(extensionName)
+    end
 end
 
 local function ensureDragRuntimeExtensions()
@@ -196,7 +225,10 @@ local function startup()
     end)
 
     loadManualUnloadExtensions()
-    ensureDragRuntimeExtensions()
+    ensureCareerMP39CoreRuntime()
+    if not isCareerMP39() then
+        ensureDragRuntimeExtensions()
+    end
 end
 
 local function onModActivated(modData)
@@ -313,7 +345,10 @@ end
 
 M.onWorldReadyState = function(state)
     if state == 2 then
-        ensureDragRuntimeExtensions()
+        ensureCareerMP39CoreRuntime()
+        if not isCareerMP39() then
+            ensureDragRuntimeExtensions()
+        end
         updateEditorBlocking()
     end
 end
