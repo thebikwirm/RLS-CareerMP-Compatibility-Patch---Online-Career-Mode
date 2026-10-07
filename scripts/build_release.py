@@ -818,7 +818,11 @@ def build_mod(
             apply_legacy_online_save_timing=apply_legacy_online_save_timing,
             apply_legacy_override_manager_patch=apply_legacy_override_manager_patch,
         )
+    print(f"Writing ZIP: {output_zip}")
+    print(f"  files: {len(entries)}")
+    print(f"  engine: {describe_zip_engine(zip_engine)}")
     write_zip(output_zip, entries, engine=zip_engine)
+    print(f"Finished ZIP: {output_zip}")
     return output_zip.stat().st_size, sha256sum(output_zip)
 
 
