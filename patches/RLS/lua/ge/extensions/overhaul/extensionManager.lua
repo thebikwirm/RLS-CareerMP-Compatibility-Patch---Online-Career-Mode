@@ -6,6 +6,11 @@ local ourModId = "RLSCO24"
 local commandCallback = nil
 local devKey = "dc124d6fb1a6261f"
 
+local function isCareerMP39()
+    local compat = type(extensions) == "table" and rawget(extensions, "careerMP_compat") or nil
+    return compat ~= nil and (compat.targetGameVersion == "0.39" or type(compat.getCurrentProfile) == "function")
+end
+
 
 local function checkVersion()
     local fileData = jsonReadFile("integrity.json")
@@ -33,7 +38,12 @@ end
 local function loadExtensions()
 
     extensions.unload("freeroam_freeroam")
-    extensions.unload("core_recoveryPrompt")
+    -- BeamNG 0.39 career depends on core_recoveryPrompt. Older RLS/CareerMP
+    -- compatibility builds unloaded it, which can leave career_career with an
+    -- unresolved dependency during multiplayer startup.
+    if not isCareerMP39() then
+        extensions.unload("core_recoveryPrompt")
+    end
 
     setExtensionUnloadMode("gameplay_drag_dragTypes_dragPracticeRace", "manual")
     setExtensionUnloadMode("gameplay_events_freeroamEvents", "manual")
@@ -57,8 +67,12 @@ local function loadExtensions()
     setExtensionUnloadMode("editor_dynamicRoutesEditor", "manual")
     setExtensionUnloadMode("vehicleMaintenance", "manual")
 
-    extensions.unload("career_career")
-    extensions.unload("career_saveSystem")
+    -- CareerMP 0.39 patches the live BeamNG career implementation at runtime.
+    -- Do not unload/replace it (or the profile save system) in that mode.
+    if not isCareerMP39() then
+        extensions.unload("career_career")
+        extensions.unload("career_saveSystem")
+    end
 end
 
 local function loadExtensionIfNeeded(extensionName)
@@ -126,8 +140,10 @@ local function unloadAllExtensions()
     removePhoneBinding()
     extensions.unload("core_gameContext")
     extensions.unload("gameplay_events_freeroamEvents")
-    extensions.unload("career_career")
-    extensions.unload("career_saveSystem")
+    if not isCareerMP39() then
+        extensions.unload("career_career")
+        extensions.unload("career_saveSystem")
+    end
     extensions.unload("gameplay_phone")
     extensions.unload("freeroam_facilities")
     extensions.unload("gameplay_repo")
@@ -155,6 +171,10 @@ local function startup()
 
     setExtensionUnloadMode("overhaul_overrideManager", "manual")
     extensions.load("overhaul_overrideManager")
+
+    -- Load the 0.39 save/profile bridge before RLS career modules initialise.
+    setExtensionUnloadMode("overhaul_careermp39Compat", "manual")
+    extensions.load("overhaul_careermp39Compat")
 
     setExtensionUnloadMode("overhaul_settings", "manual")
     setExtensionUnloadMode("overhaul_maps", "manual")
