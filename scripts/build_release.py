@@ -128,11 +128,7 @@ def patch_rls_039_save_api(entries: dict[str, bytes]) -> None:
 
 
 def patch_rls_039_player_attributes(entries: dict[str, bytes]) -> None:
-    """Make old RLS playerAttributes safe during CareerMP 0.39 career activation.
-
-    RLS packages can contain either the vanilla-path copy or the override-path
-    copy (or both), depending on release/build layout. Patch every copy present.
-    """
+    """Harden all RLS playerAttributes copies for CareerMP 0.39 startup."""
 
     candidate_paths = [
         "lua/ge/extensions/career/modules/playerAttributes.lua",
@@ -146,11 +142,10 @@ def patch_rls_039_player_attributes(entries: dict[str, bytes]) -> None:
         if not payload:
             continue
 
-        text = payload.decode("utf-8")
+        text = payload.decode("utf-8").replace("\r\n", "\n")
         original = text
 
-        # Ensure the backing tables exist before any career-load callback can
-        # query or mutate them.
+        # Normalize backing storage declarations.
         text = re.sub(
             r"local\s+attributes\s*(?:=\s*nil)?\s*\n",
             "local attributes = {}\n",
@@ -164,8 +159,49 @@ def patch_rls_039_player_attributes(entries: dict[str, bytes]) -> None:
             count=1,
         )
 
-        # Old 2.6.x builds dereference attributes directly here. Guard both
-        # getter functions regardless of whitespace/body differences.
+        # Insert a reusable guard immediately before init().
+        if "local function ensureAttributes()" not in text:
+            marker = "local function init()\n"
+            if marker not in text:
+                raise RuntimeError(
+                    f"Unable to locate init() in {path}; source layout changed."
+                )
+            helper = """local function ensureAttributes()
+  if not attributes then
+    attributes = {}
+  end
+  if not attributeLog then
+    attributeLog = {}
+  end
+end
+
+"""
+            text = text.replace(marker, helper + marker, 1)
+
+        # Ensure init() always leaves valid tables.
+        text = text.replace(
+            "local function init()\n",
+            "local function init()\n  ensureAttributes()\n",
+            1,
+        )
+
+        # Guard common public/internal entrypoints used during career activation.
+        for fn_name in (
+            "addAttributes",
+            "setAttributes",
+            "getAttribute",
+            "getAttributeValue",
+            "getAllAttributes",
+            "onSaveCurrentProfile",
+            "onCareerActive",
+            "onExtensionLoaded",
+        ):
+            pattern = re.compile(
+                rf"(local function {re.escape(fn_name)}\([^\n]*\)\n)(?!\s*ensureAttributes\(\))"
+            )
+            text, _ = pattern.subn(r"\1  ensureAttributes()\n", text, count=1)
+
+        # Force safe getter bodies regardless of old implementation shape.
         getter_value = re.compile(
             r"local function getAttributeValue\(attributeName\)\s*\n.*?\nend",
             re.DOTALL,
@@ -173,9 +209,7 @@ def patch_rls_039_player_attributes(entries: dict[str, bytes]) -> None:
         if getter_value.search(text):
             text = getter_value.sub(
                 """local function getAttributeValue(attributeName)
-  if not attributes then
-    return 0
-  end
+  ensureAttributes()
   return (attributes[attributeName] or baseAttribute).value
 end""",
                 text,
@@ -189,29 +223,22 @@ end""",
         if getter.search(text):
             text = getter.sub(
                 """local function getAttribute(attributeName)
-  if not attributes then
-    return nil
-  end
+  ensureAttributes()
   return attributes[attributeName]
 end""",
                 text,
                 count=1,
             )
 
-        # Some old builds return early from onExtensionLoaded before init().
-        # Move/init the table first when that exact old pattern is present.
-        text = text.replace(
-            """local function onExtensionLoaded()
-  if not career_career.isActive() then return false end
-""",
-            """local function onExtensionLoaded()
-  if not attributes then
-    init()
-  end
-  if not career_career.isActive() then return false end
-""",
-            1,
-        )
+        # Add a runtime proof marker once.
+        if "RLSCareerMP39 playerAttributes guard active" not in text:
+            marker = "local function onExtensionLoaded()\n"
+            if marker in text:
+                text = text.replace(
+                    marker,
+                    marker + '  log("I", "RLSCareerMP39", "playerAttributes guard active: ' + path + '")\n',
+                    1,
+                )
 
         if text != original:
             entries[path] = text.encode("utf-8")
