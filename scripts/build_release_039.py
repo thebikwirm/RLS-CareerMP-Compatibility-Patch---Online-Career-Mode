@@ -43,6 +43,16 @@ def main() -> int:
         "--out-dir",
         type=Path,
         default=repo_root / "built-039",
+        help="Directory for build artifacts before optional server installation.",
+    )
+    parser.add_argument(
+        "--server-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional BeamMP server root. When supplied, the finished CareerMP.zip "
+            "and RLS compatibility zip are copied to Resources/Client automatically."
+        ),
     )
     add_zip_engine_argument(parser)
     args = parser.parse_args()
@@ -50,6 +60,7 @@ def main() -> int:
     rls_original = args.rls_original.expanduser().resolve()
     careermp_original = args.careermp_039.expanduser().resolve()
     out_dir = args.out_dir.expanduser().resolve()
+    server_root = args.server_root.expanduser().resolve() if args.server_root else None
 
     if not rls_original.is_file():
         raise SystemExit(f"RLS original zip not found: {rls_original}")
@@ -98,6 +109,25 @@ def main() -> int:
     print(f"Built: {rls_out}")
     print(f"Copied unchanged: {careermp_out}")
     print(f"Wrote: {checksums}")
+
+    if server_root:
+        resources_client = server_root / "Resources" / "Client"
+        resources_client.mkdir(parents=True, exist_ok=True)
+
+        installed_rls = resources_client / rls_out.name
+        installed_careermp = resources_client / "CareerMP.zip"
+
+        shutil.copy2(rls_out, installed_rls)
+        shutil.copy2(careermp_out, installed_careermp)
+
+        print("")
+        print("Installed to BeamMP server:")
+        print(f"  {installed_rls}")
+        print(f"  {installed_careermp}")
+        print("")
+        print("NOTE: remove any older/original RLS career overhaul zip from Resources/Client")
+        print("      so only the generated *_careermp039_compatible.zip is active.")
+
     return 0
 
 
