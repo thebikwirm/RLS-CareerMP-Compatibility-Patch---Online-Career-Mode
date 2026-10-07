@@ -81,6 +81,7 @@ def main() -> int:
         rls_out,
         RLS_REMOVE_PREFIXES,
         args.zip_engine,
+        apply_legacy_online_save_timing=False,
     )
 
     # CareerMP-0.39 already contains its own BeamNG 0.39 compatibility layer,
