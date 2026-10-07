@@ -645,6 +645,7 @@ def patch_rls_entries(
     output_name: str,
     *,
     apply_legacy_online_save_timing: bool = True,
+    apply_legacy_override_manager_patch: bool = True,
 ) -> None:
     """Keep BeamNG mod metadata aligned with the generated compatibility zip.
 
@@ -660,7 +661,7 @@ def patch_rls_entries(
 
     override_manager_path = "lua/ge/extensions/overhaul/overrideManager.lua"
     override_manager = entries.get(override_manager_path)
-    if override_manager:
+    if override_manager and apply_legacy_override_manager_patch:
         text = override_manager.decode("utf-8").replace("\r\n", "\n")
         text = replace_required(
             text,
@@ -783,6 +784,8 @@ def patch_rls_entries(
             "RLS override manager restores isExtensionLoaded",
         )
         entries[override_manager_path] = text.encode("utf-8")
+    elif override_manager and not apply_legacy_override_manager_patch:
+        print("Skipping legacy overrideManager.lua text patches for BeamNG 0.39 build")
 
     info = entries.get(RLS_INFO_PATH)
     if not info:
@@ -801,6 +804,7 @@ def build_mod(
     zip_engine: str = "auto",
     *,
     apply_legacy_online_save_timing: bool = True,
+    apply_legacy_override_manager_patch: bool = True,
 ) -> tuple[int, str]:
     entries = read_careermp_entries(base_zip) if patch_dir.name == "CareerMP" else read_zip_entries(base_zip)
     remove_entry_prefixes(entries, remove_prefixes)
@@ -812,6 +816,7 @@ def build_mod(
             entries,
             output_zip.name,
             apply_legacy_online_save_timing=apply_legacy_online_save_timing,
+            apply_legacy_override_manager_patch=apply_legacy_override_manager_patch,
         )
     write_zip(output_zip, entries, engine=zip_engine)
     return output_zip.stat().st_size, sha256sum(output_zip)
