@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import io
 import json
+import re
 import zipfile
 from pathlib import Path
 
@@ -124,6 +125,94 @@ def patch_rls_039_save_api(entries: dict[str, bytes]) -> None:
             print(f"  - {item}")
     else:
         print("BeamNG 0.39 save-profile rewrites: no legacy getCurrentSaveSlot calls found")
+
+
+def patch_rls_039_player_attributes(entries: dict[str, bytes]) -> None:
+    """Make RLS playerAttributes safe during CareerMP's pre-profile startup window.
+
+    In BeamNG 0.39, CareerMP can load RLS gameplay extensions before a profile is
+    selected. Older RLS playerAttributes versions leave the local attributes
+    table nil when career_career is not active yet, while modules such as
+    BeamEats and loans may already query it.
+
+    Current RLS avoids this by initializing the table before the career-active
+    early return and by treating pre-init reads as zero. Apply the same narrow
+    behavior to the input RLS archive without replacing the whole module.
+    """
+
+    path = "lua/ge/extensions/overrides/career/modules/playerAttributes.lua"
+    payload = entries.get(path)
+    if not payload:
+        print("BeamNG 0.39 playerAttributes patch: source file not present")
+        return
+
+    text = payload.decode("utf-8")
+    changed = False
+
+    old_loaded = """local function onExtensionLoaded()
+  if not career_career.isActive() then return false end
+"""
+    new_loaded = """local function onExtensionLoaded()
+  if not attributes then
+    init()
+  end
+  if not career_career.isActive() then return false end
+"""
+    if old_loaded in text:
+        text = text.replace(old_loaded, new_loaded, 1)
+        changed = True
+    elif "local function onExtensionLoaded()\n  if not attributes then\n    init()\n  end\n" not in text:
+        raise RuntimeError(
+            f"Unable to patch RLS playerAttributes startup guard in {path}; source file layout changed."
+        )
+
+    getter_pattern = re.compile(
+        r"local function getAttributeValue\(attributeName\)\s*\n"
+        r"(?P<body>.*?)"
+        r"\nend",
+        re.DOTALL,
+    )
+    match = getter_pattern.search(text)
+    if not match:
+        raise RuntimeError(
+            f"Unable to locate getAttributeValue in {path}; source file layout changed."
+        )
+
+    safe_getter = """local function getAttributeValue(attributeName)
+  if not attributes then
+    return 0
+  end
+  return (attributes[attributeName] or baseAttribute).value
+end"""
+
+    existing_getter = match.group(0)
+    if existing_getter != safe_getter:
+        text = text[:match.start()] + safe_getter + text[match.end():]
+        changed = True
+
+    get_attr_pattern = re.compile(
+        r"local function getAttribute\(attributeName\)\s*\n"
+        r"(?P<body>.*?)"
+        r"\nend",
+        re.DOTALL,
+    )
+    match = get_attr_pattern.search(text)
+    if match:
+        safe_get_attr = """local function getAttribute(attributeName)
+  if not attributes then
+    return nil
+  end
+  return attributes[attributeName]
+end"""
+        if match.group(0) != safe_get_attr:
+            text = text[:match.start()] + safe_get_attr + text[match.end():]
+            changed = True
+
+    entries[path] = text.encode("utf-8")
+    print(
+        "BeamNG 0.39 playerAttributes patch: "
+        + ("applied pre-profile initialization/read guards" if changed else "already present")
+    )
 
 
 def patch_rls_online_save_timing(entries: dict[str, bytes]) -> None:
@@ -654,6 +743,7 @@ def patch_rls_entries(
     """
 
     patch_rls_039_save_api(entries)
+    patch_rls_039_player_attributes(entries)
     if apply_legacy_online_save_timing:
         patch_rls_online_save_timing(entries)
     else:
