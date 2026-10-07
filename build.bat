@@ -12,6 +12,7 @@ python .\scripts\build_release_039.py ^
   --careermp-039 "%CAREERMP%" ^
   --server-root "%SERVER%" ^
   --rls-install-name "rls_career_overhaul_2.6.7_careermp_compatible.zip"
+  --zip-engine python
 
 if errorlevel 1 (
     echo.
