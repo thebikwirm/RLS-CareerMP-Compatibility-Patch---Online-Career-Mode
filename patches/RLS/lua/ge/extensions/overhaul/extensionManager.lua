@@ -257,6 +257,14 @@ local function startup()
     setExtensionUnloadMode("overhaul_careermp39Compat", "manual")
     extensions.load("overhaul_careermp39Compat")
 
+    -- Pin BeamNG 0.39's native career dependency chain immediately. BeamMP keeps
+    -- activating/mounting resource mods after RLS itself activates, and each file
+    -- change can make the extension resolver drop gameplay_traffic. CareerMP cannot
+    -- create a profile once career_career loses that dependency.
+    if isCareerMP39() then
+        ensureCareerMP39CoreRuntime()
+    end
+
     -- Do not register/load the RLS gameplay stack yet on the 0.39 build.
     -- CareerMP creates/selects its profile after the world reaches ready state.
     if not isCareerMP39() then
@@ -422,8 +430,26 @@ M.onWorldReadyState = function(state)
 end
 
 local function onUpdate()
-    if isCareerMP39() and not careerMP39RuntimeStarted then
-        startCareerMP39RuntimeIfReady()
+    if isCareerMP39() then
+        -- Resource activation can invalidate/re-resolve extensions before the world
+        -- reaches ready state. Repair only when a core extension actually vanished,
+        -- rather than reloading it every frame.
+        local missingCore =
+            not gameplay_traffic or
+            not gameplay_police or
+            not gameplay_parking or
+            not core_recoveryPrompt or
+            not career_saveSystem or
+            not career_career
+
+        if missingCore then
+            log("W", "RLSCareerMP39", "native career/traffic runtime missing during resource activation; restoring")
+            ensureCareerMP39CoreRuntime()
+        end
+
+        if not careerMP39RuntimeStarted then
+            startCareerMP39RuntimeIfReady()
+        end
     end
 end
 
