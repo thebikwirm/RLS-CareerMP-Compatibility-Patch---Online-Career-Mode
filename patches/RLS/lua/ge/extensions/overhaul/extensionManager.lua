@@ -7,10 +7,10 @@ local commandCallback = nil
 local devKey = "dc124d6fb1a6261f"
 
 local careerMP39RuntimeStarted = false
+local careerMP39Build = true
 
 local function isCareerMP39()
-    local compat = type(extensions) == "table" and rawget(extensions, "careerMP_compat") or nil
-    return compat ~= nil and (compat.targetGameVersion == "0.39" or type(compat.getCurrentProfile) == "function")
+    return careerMP39Build
 end
 
 
@@ -151,7 +151,13 @@ local function startCareerMP39RuntimeIfReady()
     end
 
     ensureCareerMP39CoreRuntime()
+
+    -- Only now register the RLS gameplay stack as manual. Registering these
+    -- before CareerMP owns a profile lets BeamNG's extension loader discover
+    -- and start them during mod activation, which defeats the readiness gate.
+    loadExtensions()
     loadManualUnloadExtensions()
+    loadExtensionIfNeeded("vehicleMaintenance")
     careerMP39RuntimeStarted = true
 
     local bridge = rawget(extensions, "overhaul_careermp39Compat")
@@ -251,15 +257,19 @@ local function startup()
     setExtensionUnloadMode("overhaul_careermp39Compat", "manual")
     extensions.load("overhaul_careermp39Compat")
 
-    setExtensionUnloadMode("overhaul_settings", "manual")
-    setExtensionUnloadMode("overhaul_maps", "manual")
-    setExtensionUnloadMode("overhaul_clearLevels", "manual")
-    setExtensionUnloadMode("overhaul_addMapChanges", "manual")
-    setExtensionUnloadMode("vehicleMaintenance", "manual")
-    extensions.load("vehicleMaintenance")
+    -- Do not register/load the RLS gameplay stack yet on the 0.39 build.
+    -- CareerMP creates/selects its profile after the world reaches ready state.
+    if not isCareerMP39() then
+        setExtensionUnloadMode("overhaul_settings", "manual")
+        setExtensionUnloadMode("overhaul_maps", "manual")
+        setExtensionUnloadMode("overhaul_clearLevels", "manual")
+        setExtensionUnloadMode("overhaul_addMapChanges", "manual")
+        setExtensionUnloadMode("vehicleMaintenance", "manual")
+        extensions.load("vehicleMaintenance")
 
-    if not core_gamestate.state or core_gamestate.state.state ~= "career" then
-        loadExtensions()
+        if not core_gamestate.state or core_gamestate.state.state ~= "career" then
+            loadExtensions()
+        end
     end
 
     core_jobsystem.create(function(job)
