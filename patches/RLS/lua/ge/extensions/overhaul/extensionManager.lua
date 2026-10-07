@@ -6,6 +6,8 @@ local ourModId = "RLSCO24"
 local commandCallback = nil
 local devKey = "dc124d6fb1a6261f"
 
+local careerMP39RuntimeStarted = false
+
 local function isCareerMP39()
     local compat = type(extensions) == "table" and rawget(extensions, "careerMP_compat") or nil
     return compat ~= nil and (compat.targetGameVersion == "0.39" or type(compat.getCurrentProfile) == "function")
@@ -117,6 +119,50 @@ local function ensureCareerMP39CoreRuntime()
     end
 end
 
+local function careerMP39ProfileReady()
+    if not isCareerMP39() then
+        return true
+    end
+
+    if worldReadyState ~= 2 then
+        return false
+    end
+
+    local bridge = type(extensions) == "table" and rawget(extensions, "overhaul_careermp39Compat") or nil
+    if not bridge or type(bridge.getCurrentProfile) ~= "function" then
+        return false
+    end
+
+    local profileName, profilePath = bridge.getCurrentProfile()
+    if not profileName or not profilePath then
+        return false
+    end
+
+    return career_career and career_career.isActive and career_career.isActive()
+end
+
+local function startCareerMP39RuntimeIfReady()
+    if careerMP39RuntimeStarted or not isCareerMP39() then
+        return careerMP39RuntimeStarted
+    end
+
+    if not careerMP39ProfileReady() then
+        return false
+    end
+
+    ensureCareerMP39CoreRuntime()
+    loadManualUnloadExtensions()
+    careerMP39RuntimeStarted = true
+
+    local bridge = rawget(extensions, "overhaul_careermp39Compat")
+    local profileName, profilePath = bridge.getCurrentProfile()
+    log("I", "RLSCareerMP39",
+        "RLS profile-dependent runtime started for profile=" ..
+        tostring(profileName) .. " path=" .. tostring(profilePath))
+
+    return true
+end
+
 local function ensureDragRuntimeExtensions()
     -- The drag practice stack drives staging AI, tree lights, timeslips and
     -- RLS drag payouts. Keeping it warm avoids BeamMP/CareerMP load-order
@@ -224,9 +270,13 @@ local function startup()
         end
     end)
 
-    loadManualUnloadExtensions()
-    ensureCareerMP39CoreRuntime()
-    if not isCareerMP39() then
+    if isCareerMP39() then
+        -- CareerMP requests/creates its local career profile only once the world
+        -- reaches ready state. Do not start RLS gameplay modules before then:
+        -- BeamEats, loans and similar modules query playerAttributes immediately.
+        startCareerMP39RuntimeIfReady()
+    else
+        loadManualUnloadExtensions()
         ensureDragRuntimeExtensions()
     end
 end
@@ -265,7 +315,10 @@ local function onModDeactivated(modData)
     if (ourModName and modData.modname == ourModName) or
        (ourModId and modData.modData and modData.modData.tagid == ourModId) then
         unloadAllExtensions()
-        loadManualUnloadExtensions()
+        careerMP39RuntimeStarted = false
+        if not isCareerMP39() then
+            loadManualUnloadExtensions()
+        end
     end
 end
 
@@ -345,11 +398,22 @@ end
 
 M.onWorldReadyState = function(state)
     if state == 2 then
-        ensureCareerMP39CoreRuntime()
-        if not isCareerMP39() then
+        if isCareerMP39() then
+            ensureCareerMP39CoreRuntime()
+            startCareerMP39RuntimeIfReady()
+        else
             ensureDragRuntimeExtensions()
         end
-        updateEditorBlocking()
+
+        if career_career and career_career.isActive and career_career.isActive() then
+            updateEditorBlocking()
+        end
+    end
+end
+
+local function onUpdate()
+    if isCareerMP39() and not careerMP39RuntimeStarted then
+        startCareerMP39RuntimeIfReady()
     end
 end
 
@@ -358,6 +422,7 @@ M.onCheatsModeChanged = function(enabled)
 end
   
 M.onVehicleSpawned = onVehicleSpawned
+M.onUpdate = onUpdate
 M.onExtensionLoaded = startup
 M.onModActivated = onModActivated
 M.onModDeactivated = onModDeactivated
