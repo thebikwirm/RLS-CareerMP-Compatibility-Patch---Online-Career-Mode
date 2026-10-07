@@ -60,11 +60,61 @@ The 0.39 port must not overwrite CareerMP-0.39's `careerMPEnabler.lua` with the 
 
 ## Build
 
+### Build only
+
+From the repository root:
+
 ```powershell
 python .\scripts\build_release_039.py \
-  --rls-original "C:\path\to\rls_career_overhaul_2.6.7.zip" \
-  --careermp-039 "C:\path\to\CareerMP.zip" \
+  --rls-original "C:\BeamNG-Mod-Build\rls_career_overhaul_2.6.7.zip" \
+  --careermp-039 "C:\BeamNG-Mod-Build\CareerMP.zip" \
   --out-dir ".\built-039"
+```
+
+This creates:
+
+```text
+built-039\
+├── CareerMP.zip
+├── rls_career_overhaul_2.6.7_careermp039_compatible.zip
+└── checksums.txt
+```
+
+### Build and install directly into the BeamMP server
+
+Pass the BeamMP server folder with `--server-root`:
+
+```powershell
+python .\scripts\build_release_039.py \
+  --rls-original "C:\BeamNG-Mod-Build\rls_career_overhaul_2.6.7.zip" \
+  --careermp-039 "C:\BeamNG-Mod-Build\CareerMP.zip" \
+  --server-root "C:\BeamMP-Server"
+```
+
+The builder still keeps a copy in `built-039`, then installs the finished client
+mods to:
+
+```text
+C:\BeamMP-Server\
+└── Resources\
+    └── Client\
+        ├── CareerMP.zip
+        └── rls_career_overhaul_2.6.7_careermp039_compatible.zip
+```
+
+`Resources\Client` is created automatically if it does not exist.
+
+Do not leave the original unpatched RLS career overhaul zip, or an older generated
+RLS CareerMP compatibility zip, in `Resources\Client` at the same time. The
+builder intentionally does not delete unrelated or older server mods automatically.
+
+If `python` is not available on Windows, use `py` instead:
+
+```powershell
+py .\scripts\build_release_039.py \
+  --rls-original "C:\BeamNG-Mod-Build\rls_career_overhaul_2.6.7.zip" \
+  --careermp-039 "C:\BeamNG-Mod-Build\CareerMP.zip" \
+  --server-root "C:\BeamMP-Server"
 ```
 
 ## Known next work
