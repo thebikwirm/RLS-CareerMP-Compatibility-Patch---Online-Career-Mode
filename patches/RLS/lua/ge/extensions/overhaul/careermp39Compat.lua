@@ -26,17 +26,22 @@ function M.isAvailable()
 end
 
 function M.getCurrentProfile()
-  local compat = careerMPCompat()
-  if compat and type(compat.getCurrentProfile) == "function" then
-    return compat.getCurrentProfile()
-  end
-
+  -- Prefer BeamNG 0.39's native API here. CareerMP-0.39's generic callPick()
+  -- currently returns "fn(...), matched"; because fn(...) is not the final
+  -- expression, Lua collapses its multiple returns. That turns
+  -- (profileName, savePath) into (profileName, "getCurrentProfile").
   if career_saveSystem and type(career_saveSystem.getCurrentProfile) == "function" then
     return career_saveSystem.getCurrentProfile()
   end
 
+  local compat = careerMPCompat()
+  if compat and type(compat.getCurrentProfile) == "function" then
+    local profile = compat.getCurrentProfile()
+    return profile, nil
+  end
+
   log("E", logTag, "No current-profile API is available")
-  return nil
+  return nil, nil
 end
 
 function M.getAllProfiles()
