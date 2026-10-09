@@ -256,6 +256,79 @@ end""",
 
 
 
+def patch_rls_039_runtime_api_guards(entries: dict[str, bytes]) -> None:
+    """Guard two known 0.39 startup incompatibilities in RLS 2.6.x."""
+
+    # Reputation queries playerAttributes while career modules are still activating.
+    # Old playerAttributes can legitimately have no backing table at this instant;
+    # a reputation value of zero is the correct default until the module finishes
+    # loading its persisted state.
+    reputation_paths = [
+        "lua/ge/extensions/overrides/career/modules/reputation.lua",
+        "lua/ge/extensions/career/modules/reputation.lua",
+    ]
+    reputation_patched = False
+    for path in reputation_paths:
+        payload = entries.get(path)
+        if not payload:
+            continue
+        text = payload.decode("utf-8").replace("\r\n", "\n")
+        old = '  local value = career_modules_playerAttributes.getAttributeValue(organization.id .. "Reputation")\n'
+        if old in text:
+            new = '''  local value = 0
+  if career_modules_playerAttributes and type(career_modules_playerAttributes.getAttributeValue) == "function" then
+    local ok, result = pcall(career_modules_playerAttributes.getAttributeValue, organization.id .. "Reputation")
+    if ok and type(result) == "number" then
+      value = result
+    else
+      log("W", "RLSCareerMP39", "playerAttributes not ready while resolving reputation for " .. tostring(organization.id) .. "; using 0")
+    end
+  end
+'''
+            text = text.replace(old, new, 1)
+            entries[path] = text.encode("utf-8")
+            reputation_patched = True
+            print(f"BeamNG 0.39 reputation startup guard applied: {path}")
+
+    if not reputation_patched:
+        raise RuntimeError(
+            "Unable to patch RLS reputation pre-init playerAttributes read; source layout changed."
+        )
+
+    # BeamNG 0.39 removed the legacy recovery-prompt helper methods used by
+    # RLS 2.6.x. Missing towing/taxi button helpers must not abort garageManager
+    # while the career is loading. We can port the actual 0.39 recovery UI later.
+    garage_path = "lua/ge/extensions/career/modules/garageManager.lua"
+    payload = entries.get(garage_path)
+    if payload:
+        text = payload.decode("utf-8").replace("\r\n", "\n")
+        old = '''local function reloadRecoveryPrompt()
+  if core_recoveryPrompt then
+    core_recoveryPrompt.addTowingButtons()
+    core_recoveryPrompt.addTaxiButtons()
+  end
+end
+'''
+        new = '''local function reloadRecoveryPrompt()
+  if not core_recoveryPrompt then return end
+  if type(core_recoveryPrompt.addTowingButtons) == "function" then
+    core_recoveryPrompt.addTowingButtons()
+  end
+  if type(core_recoveryPrompt.addTaxiButtons) == "function" then
+    core_recoveryPrompt.addTaxiButtons()
+  end
+end
+'''
+        if old in text:
+            text = text.replace(old, new, 1)
+            entries[garage_path] = text.encode("utf-8")
+            print(f"BeamNG 0.39 recovery-prompt API guard applied: {garage_path}")
+        elif "type(core_recoveryPrompt.addTowingButtons)" not in text:
+            raise RuntimeError(
+                f"Unable to patch removed recovery-prompt helpers in {garage_path}; source layout changed."
+            )
+
+
 def patch_rls_online_save_timing(entries: dict[str, bytes]) -> None:
     """Defer event-completion saves that desync online jobs and freeroam events.
 
@@ -785,6 +858,7 @@ def patch_rls_entries(
 
     patch_rls_039_save_api(entries)
     patch_rls_039_player_attributes(entries)
+    patch_rls_039_runtime_api_guards(entries)
     if apply_legacy_online_save_timing:
         patch_rls_online_save_timing(entries)
     else:
