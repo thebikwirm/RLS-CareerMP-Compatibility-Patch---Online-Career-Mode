@@ -87,12 +87,33 @@ end
 """
     new = """local function withRemoteVehiclesProtected(fn, ...)
 \tinstallProtection()
+
+\t-- RLS 2.6.x can query organization reputation while BeamNG is still
+\t-- activating career modules, before playerAttributes has initialized its
+\t-- backing table. Wrap the public read for the activation window so that an
+\t-- uninitialized attribute resolves to zero instead of aborting career start.
+\tlocal originalGetAttributeValue = nil
+\tif career_modules_playerAttributes and career_modules_playerAttributes.getAttributeValue then
+\t\toriginalGetAttributeValue = career_modules_playerAttributes.getAttributeValue
+\t\tcareer_modules_playerAttributes.getAttributeValue = function(attributeName)
+\t\t\tlocal ok, value = pcall(originalGetAttributeValue, attributeName)
+\t\t\tif ok then return value end
+\t\t\tlog("W", logTag, "playerAttributes not ready during career activation for " .. tostring(attributeName) .. "; using 0")
+\t\t\treturn 0
+\t\tend
+\tend
+
 \tlocal args = {...}
 \tlocal function invoke()
 \t\treturn fn(unpack(args))
 \tend
 \tlocal results = {xpcall(invoke, debug.traceback)}
+
+\tif originalGetAttributeValue and career_modules_playerAttributes then
+\t\tcareer_modules_playerAttributes.getAttributeValue = originalGetAttributeValue
+\tend
 \tremoveProtection()
+
 \tlocal ok = table.remove(results, 1)
 \tif not ok then
 \t\tlog("E", logTag, "protected call failed with traceback:\\n" .. tostring(results[1]))
