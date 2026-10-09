@@ -329,6 +329,116 @@ end
             )
 
 
+def patch_rls_039_batch_compat(entries: dict[str, bytes]) -> None:
+    """Batch several known RLS 2.6.x -> BeamNG 0.39 compatibility fixes."""
+
+    # 1) garageManager: inventory.moveVehicleToGarage may not exist on the
+    # runtime inventory module that wins extension precedence. Provide a local
+    # compatibility helper so startup can still normalize stored locations.
+    garage_path = "lua/ge/extensions/career/modules/garageManager.lua"
+    payload = entries.get(garage_path)
+    if payload:
+        text = payload.decode("utf-8").replace("\r\n", "\n")
+        if "local function moveVehicleToGarageCompat" not in text:
+            anchor = "local function fillGarages()\n"
+            if anchor not in text:
+                raise RuntimeError(f"Unable to locate fillGarages() in {garage_path}")
+            helper = '''local function moveVehicleToGarageCompat(id, garage)
+  if career_modules_inventory and type(career_modules_inventory.moveVehicleToGarage) == "function" then
+    return career_modules_inventory.moveVehicleToGarage(id, garage)
+  end
+
+  local vehicles = career_modules_inventory and career_modules_inventory.getVehicles and career_modules_inventory.getVehicles()
+  local vehicle = vehicles and vehicles[id]
+  if not vehicle then return false end
+
+  local targetGarage = garage
+  if not targetGarage and type(M.getNextAvailableSpace) == "function" then
+    targetGarage = M.getNextAvailableSpace()
+  end
+  if not targetGarage then return false end
+
+  vehicle.location = targetGarage
+  vehicle.niceLocation = type(M.garageIdToName) == "function" and M.garageIdToName(targetGarage) or tostring(targetGarage)
+  log("W", "RLSCareerMP39", "inventory.moveVehicleToGarage unavailable; applied garage location fallback for inventory id " .. tostring(id))
+  return true
+end
+
+'''
+            text = text.replace(anchor, helper + anchor, 1)
+
+        text = text.replace(
+            "      career_modules_inventory.moveVehicleToGarage(id)\n",
+            "      moveVehicleToGarageCompat(id)\n",
+        )
+        text = text.replace(
+            "      career_modules_inventory.moveVehicleToGarage(id, vehicle.location)\n",
+            "      moveVehicleToGarageCompat(id, vehicle.location)\n",
+        )
+        entries[garage_path] = text.encode("utf-8")
+        print(f"BeamNG 0.39 garage inventory compatibility applied: {garage_path}")
+
+    # 2) delivery/general: onSaveCurrentProfile can run before onCareerActivated
+    # populated the local d* module references. Lazily resolve them before save.
+    delivery_paths = [
+        "lua/ge/extensions/overrides/career/modules/delivery/general.lua",
+        "lua/ge/extensions/career/modules/delivery/general.lua",
+    ]
+    for delivery_path in delivery_paths:
+        payload = entries.get(delivery_path)
+        if not payload:
+            continue
+        text = payload.decode("utf-8").replace("\r\n", "\n")
+        if "local function ensureDeliveryRefs()" not in text:
+            anchor = "local deliveryGameTime = 0\n"
+            if anchor not in text:
+                continue
+            helper = '''local function ensureDeliveryRefs()
+  dParcelManager = dParcelManager or career_modules_delivery_parcelManager
+  dCargoScreen = dCargoScreen or career_modules_delivery_cargoScreen
+  dGeneral = dGeneral or career_modules_delivery_general
+  dGenerator = dGenerator or career_modules_delivery_generator
+  dProgress = dProgress or career_modules_delivery_progress
+  dVehicleTasks = dVehicleTasks or career_modules_delivery_vehicleTasks
+  dTasklist = dTasklist or career_modules_delivery_tasklist
+  dParcelMods = dParcelMods or career_modules_delivery_parcelMods
+  dVehOfferManager = dVehOfferManager or career_modules_delivery_vehicleOfferManager
+  dTutorial = dTutorial or career_modules_delivery_tutorial
+  step = step or util_stepHandler
+end
+
+'''
+            text = text.replace(anchor, helper + anchor, 1)
+
+        text = text.replace(
+            "local function onSaveCurrentSaveSlot(currentSavePath)\n",
+            "local function onSaveCurrentSaveSlot(currentSavePath)\n  ensureDeliveryRefs()\n",
+            1,
+        )
+        text = text.replace(
+            "local function onSaveCurrentProfile(currentSavePath)\n",
+            "local function onSaveCurrentProfile(currentSavePath)\n  ensureDeliveryRefs()\n",
+            1,
+        )
+        entries[delivery_path] = text.encode("utf-8")
+        print(f"BeamNG 0.39 delivery lazy-reference guard applied: {delivery_path}")
+
+    # 3) businessComputer: old RLS packages can still declare the removed
+    # racingTeamRaceFlow extension as a hard dependency. Newer RLS does not.
+    business_path = "lua/ge/extensions/career/modules/business/businessComputer.lua"
+    payload = entries.get(business_path)
+    if payload:
+        text = payload.decode("utf-8").replace("\r\n", "\n")
+        before = text
+        text = text.replace('"career_modules_business_racingTeamRaceFlow", ', '')
+        text = text.replace("'career_modules_business_racingTeamRaceFlow', ", "")
+        text = text.replace(', "career_modules_business_racingTeamRaceFlow"', '')
+        text = text.replace(", 'career_modules_business_racingTeamRaceFlow'", "")
+        if text != before:
+            entries[business_path] = text.encode("utf-8")
+            print(f"BeamNG 0.39 removed stale racingTeamRaceFlow dependency: {business_path}")
+
+
 def patch_rls_online_save_timing(entries: dict[str, bytes]) -> None:
     """Defer event-completion saves that desync online jobs and freeroam events.
 
@@ -859,6 +969,7 @@ def patch_rls_entries(
     patch_rls_039_save_api(entries)
     patch_rls_039_player_attributes(entries)
     patch_rls_039_runtime_api_guards(entries)
+    patch_rls_039_batch_compat(entries)
     if apply_legacy_online_save_timing:
         patch_rls_online_save_timing(entries)
     else:
