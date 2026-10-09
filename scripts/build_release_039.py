@@ -10,7 +10,7 @@ from build_release import (
     read_careermp_entries,
     sha256sum,
 )
-from zip_utils import add_zip_engine_argument, describe_zip_engine
+from zip_utils import add_zip_engine_argument, describe_zip_engine, write_zip
 
 
 def validate_careermp_039(careermp_zip: Path) -> None:
@@ -29,6 +29,88 @@ def validate_careermp_039(careermp_zip: Path) -> None:
             "CareerMP input does not advertise targetGameVersion 0.39. "
             "Use the maintained CareerMP-0.39 client zip."
         )
+
+
+def patch_careermp_039(entries: dict[str, bytes]) -> None:
+    """Apply narrow fixes required by BeamNG 0.39.4/RLS integration."""
+
+    compat_path = "lua/ge/extensions/careerMP/compat.lua"
+    compat = entries.get(compat_path)
+    if not compat:
+        raise SystemExit(f"CareerMP input missing {compat_path}")
+
+    text = compat.decode("utf-8").replace("\r\n", "\n")
+    old = """local function callPick(module, names, ...)
+\tlocal fn, matched = pick(module, unpack(names))
+\tif not fn then
+\t\tlog("E", "careerMP.compat", "none of {" .. table.concat(names, ", ") .. "} exist on target module")
+\t\treturn nil
+\tend
+\treturn fn(...), matched
+end
+"""
+    new = """local function callPick(module, names, ...)
+\tlocal fn = pick(module, unpack(names))
+\tif not fn then
+\t\tlog("E", "careerMP.compat", "none of {" .. table.concat(names, ", ") .. "} exist on target module")
+\t\treturn nil
+\tend
+\t-- Keep all return values from the underlying BeamNG API. In Lua, placing
+\t-- fn(...) before another return expression collapses it to one value.
+\treturn fn(...)
+end
+"""
+    if old not in text:
+        if "return fn(...)\nend" not in text:
+            raise RuntimeError("Unable to patch CareerMP 0.39 callPick return handling")
+    else:
+        text = text.replace(old, new, 1)
+    entries[compat_path] = text.encode("utf-8")
+
+    patches_path = "lua/ge/extensions/careerMP/careerPatches.lua"
+    payload = entries.get(patches_path)
+    if not payload:
+        raise SystemExit(f"CareerMP input missing {patches_path}")
+
+    text = payload.decode("utf-8").replace("\r\n", "\n")
+    old = """local function withRemoteVehiclesProtected(fn, ...)
+\tinstallProtection()
+\tlocal results = {pcall(fn, ...)}
+\tremoveProtection()
+\tlocal ok = table.remove(results, 1)
+\tif not ok then
+\t\tlog("E", logTag, "protected call failed: " .. tostring(results[1]))
+\t\treturn nil
+\tend
+\treturn unpack(results)
+end
+"""
+    new = """local function withRemoteVehiclesProtected(fn, ...)
+\tinstallProtection()
+\tlocal args = {...}
+\tlocal function invoke()
+\t\treturn fn(unpack(args))
+\tend
+\tlocal results = {xpcall(invoke, debug.traceback)}
+\tremoveProtection()
+\tlocal ok = table.remove(results, 1)
+\tif not ok then
+\t\tlog("E", logTag, "protected call failed with traceback:\\n" .. tostring(results[1]))
+\t\treturn nil
+\tend
+\treturn unpack(results)
+end
+"""
+    if old not in text:
+        if "protected call failed with traceback:" not in text:
+            raise RuntimeError("Unable to patch CareerMP protected-call traceback")
+    else:
+        text = text.replace(old, new, 1)
+    entries[patches_path] = text.encode("utf-8")
+
+    print("Patched CareerMP-0.39:")
+    print("  - compat.lua preserves native multiple return values")
+    print("  - careerPatches.lua logs full protected-call tracebacks")
 
 
 def main() -> int:
@@ -93,10 +175,11 @@ def main() -> int:
         apply_legacy_override_manager_patch=False,
     )
 
-    # CareerMP-0.39 already contains its own BeamNG 0.39 compatibility layer,
-    # runtime career patches and profile handling. Do not overlay the old
-    # CareerMP 0.0.37 patch directory onto it.
-    shutil.copy2(careermp_original, careermp_out)
+    # Keep CareerMP-0.39's architecture intact, but apply narrow 0.39.4 fixes
+    # required by the RLS integration.
+    careermp_entries = read_careermp_entries(careermp_original)
+    patch_careermp_039(careermp_entries)
+    write_zip(careermp_out, careermp_entries, engine=args.zip_engine)
     cmp_size = careermp_out.stat().st_size
     cmp_hash = sha256sum(careermp_out)
 
@@ -109,7 +192,7 @@ def main() -> int:
                 "",
                 f"{rls_out.name} size={rls_size}",
                 f"{careermp_out.name} size={cmp_size}",
-                "CareerMP-0.39 copied unchanged by design",
+                "CareerMP-0.39 patched: profile return preservation + traceback diagnostics",
                 f"zip_engine={describe_zip_engine(args.zip_engine)}",
             ]
         ),
@@ -117,7 +200,7 @@ def main() -> int:
     )
 
     print(f"Built: {rls_out}")
-    print(f"Copied unchanged: {careermp_out}")
+    print(f"Built patched CareerMP: {careermp_out}")
     print(f"Wrote: {checksums}")
 
     if server_root:
