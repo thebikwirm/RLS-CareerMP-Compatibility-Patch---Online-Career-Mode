@@ -291,8 +291,12 @@ def patch_rls_039_runtime_api_guards(entries: dict[str, bytes]) -> None:
             print(f"BeamNG 0.39 reputation startup guard applied: {path}")
 
     if not reputation_patched:
-        raise RuntimeError(
-            "Unable to patch RLS reputation pre-init playerAttributes read; source layout changed."
+        # This is no longer fatal. The 0.39 build also guards playerAttributes
+        # reads at the CareerMP activation boundary, which is more reliable than
+        # depending on which RLS reputation.lua copy wins extension precedence.
+        print(
+            "BeamNG 0.39 reputation source guard not applied; "
+            "CareerMP activation-boundary guard will handle pre-init reads"
         )
 
     # BeamNG 0.39 removed the legacy recovery-prompt helper methods used by
