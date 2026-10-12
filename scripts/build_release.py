@@ -583,6 +583,83 @@ end
 
 
 
+def patch_rls_039_career_module_order(entries: dict[str, bytes]) -> None:
+    """Make old RLS career-module activation deterministic on BeamNG 0.39.
+
+    RLS 2.6.x builds the module list from FS:findFiles(), so load order depends on
+    filesystem enumeration. Loans/reputation can initialize before playerAttributes,
+    and delivery/general can initialize before its helper modules.
+    """
+
+    candidates = [
+        "lua/ge/extensions/overrides/career/career.lua",
+        "lua/ge/extensions/career/career.lua",
+    ]
+
+    patched = 0
+    for path in candidates:
+        payload = entries.get(path)
+        if not payload:
+            continue
+
+        text = payload.decode("utf-8").replace("\r\n", "\n")
+        original = text
+
+        needle = """    extensions.load(careerModules)
+    extensions.disableSerialization(careerModules)
+"""
+        if needle in text and "RLSCareerMP39 deterministic career module order" not in text:
+            replacement = """    -- RLSCareerMP39 deterministic career module order
+    -- FS:findFiles() order is not stable enough for old RLS startup assumptions.
+    local priority = {
+      career_modules_playerAttributes = 0,
+      career_modules_reputation = 10,
+      career_modules_delivery_parcelManager = 20,
+      career_modules_delivery_vehicleTasks = 21,
+      career_modules_delivery_generator = 22,
+      career_modules_delivery_progress = 23,
+      career_modules_delivery_general = 30,
+      career_modules_loans = 40,
+    }
+
+    table.sort(careerModules, function(a, b)
+      local pa = priority[a] or 100
+      local pb = priority[b] or 100
+      if pa == pb then return a < b end
+      return pa < pb
+    end)
+
+    -- Racing-business modules have hard dependencies on these event modules in
+    -- older RLS releases. Preload them before the career batch is resolved.
+    local raceDeps = {
+      "gameplay_events_freContracts_state",
+      "gameplay_events_freContracts_sanctionedRacing",
+      "gameplay_events_freeroam_competitiveTrackFlow",
+    }
+    for _, dep in ipairs(raceDeps) do
+      if not extensions[dep] then
+        pcall(extensions.load, dep)
+      end
+    end
+
+    log("I", "RLSCareerMP39", "deterministic career module order applied; playerAttributes first")
+
+    extensions.load(careerModules)
+    extensions.disableSerialization(careerModules)
+"""
+            text = text.replace(needle, replacement, 1)
+
+        if text != original:
+            entries[path] = text.encode("utf-8")
+            patched += 1
+            print(f"BeamNG 0.39 deterministic career-module ordering applied: {path}")
+
+    if patched == 0:
+        raise RuntimeError(
+            "Unable to patch RLS career module load order; career.lua source layout changed."
+        )
+
+
 def patch_rls_online_save_timing(entries: dict[str, bytes]) -> None:
     """Defer event-completion saves that desync online jobs and freeroam events.
 
@@ -1115,6 +1192,7 @@ def patch_rls_entries(
     patch_rls_039_runtime_api_guards(entries)
     patch_rls_039_batch_compat(entries)
     patch_rls_039_final_runtime_guards(entries)
+    patch_rls_039_career_module_order(entries)
     if apply_legacy_online_save_timing:
         patch_rls_online_save_timing(entries)
     else:
