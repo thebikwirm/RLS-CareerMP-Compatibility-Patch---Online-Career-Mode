@@ -502,6 +502,8 @@ end
             continue
 
         if "delivery submodules not ready; returning zero penalty" in text:
+            delivery_count += 1
+            print(f"BeamNG 0.39 delivery penalty guard already present: {path}")
             continue
 
         def delivery_repl(match):
@@ -559,6 +561,11 @@ end
             entries[path] = text.encode("utf-8")
             racing_count += 1
             print(f"BeamNG 0.39 removed stale racing-team hard dependency: {path}")
+        else:
+            # Treat an already-clean racingTeam module as successfully guarded.
+            if not any(dep in text for dep in stale_deps):
+                racing_count += 1
+                print(f"BeamNG 0.39 racing-team dependency guard already present: {path}")
 
     print(
         "BeamNG 0.39 final runtime guards summary: "
