@@ -444,13 +444,16 @@ end
 
 
 def patch_rls_039_final_runtime_guards(entries: dict[str, bytes]) -> None:
-    """Final-pass guards for files that are sensitive to RLS override precedence."""
+    """Final-pass guards for files sensitive to RLS override precedence."""
 
-    # Reputation: patch every final reputation.lua copy, regardless of whether it
-    # originated from /career/modules or /overrides/career/modules.
+    # Reputation: replace any direct organization reputation read, regardless of
+    # whitespace or quote style. This runs after all overlays are applied.
     rep_count = 0
     rep_pattern = re.compile(
-        r'(?m)^(?P<indent>\\s*)local\\s+value\\s*=\\s*career_modules_playerAttributes\\.getAttributeValue\\(organization\\.id\\s*\\.\\.\\s*["\\x27]Reputation["\\x27]\\)\\s*$'
+        r'(?m)^(?P<indent>[ \t]*)local[ \t]+value[ \t]*=[ \t]*'
+        r'career_modules_playerAttributes\.getAttributeValue\('
+        r'organization\.id[ \t]*\.\.[ \t]*["\x27]Reputation["\x27]'
+        r'\)[ \t]*$'
     )
 
     for path in list(entries):
@@ -462,32 +465,30 @@ def patch_rls_039_final_runtime_guards(entries: dict[str, bytes]) -> None:
             continue
 
         def rep_repl(match):
-            indent = match.group("indent")
+            i = match.group("indent")
             return (
-                indent + "local value = 0\n"
-                + indent + "if career_modules_playerAttributes and type(career_modules_playerAttributes.getAttributeValue) == \"function\" then\n"
-                + indent + "  local ok, result = pcall(career_modules_playerAttributes.getAttributeValue, organization.id .. \"Reputation\")\n"
-                + indent + "  if ok and type(result) == \"number\" then\n"
-                + indent + "    value = result\n"
-                + indent + "  else\n"
-                + indent + "    log(\"W\", \"RLSCareerMP39\", \"playerAttributes not ready while resolving reputation for \" .. tostring(organization.id) .. \"; using 0\")\n"
-                + indent + "  end\n"
-                + indent + "end"
+                i + "local value = 0\n"
+                + i + "if career_modules_playerAttributes and type(career_modules_playerAttributes.getAttributeValue) == \"function\" then\n"
+                + i + "  local ok, result = pcall(career_modules_playerAttributes.getAttributeValue, organization.id .. \"Reputation\")\n"
+                + i + "  if ok and type(result) == \"number\" then\n"
+                + i + "    value = result\n"
+                + i + "  else\n"
+                + i + "    log(\"W\", \"RLSCareerMP39\", \"playerAttributes not ready while resolving reputation for \" .. tostring(organization.id) .. \"; using 0\")\n"
+                + i + "  end\n"
+                + i + "end"
             )
 
-        new_text, count = rep_pattern.subn(rep_repl, text, count=1)
+        text2, count = rep_pattern.subn(rep_repl, text)
         if count:
-            entries[path] = new_text.encode("utf-8")
-            rep_count += 1
-            print(f"BeamNG 0.39 final reputation guard applied: {path}")
+            entries[path] = text2.encode("utf-8")
+            rep_count += count
+            print(f"BeamNG 0.39 final reputation guard applied ({count}): {path}")
 
-    if rep_count == 0:
-        print("BeamNG 0.39 final reputation guard: no matching direct reads remained")
-
-    # Delivery: getDeliveryModePenalty is called by save hooks even when the
-    # delivery submodules have not yet finished activation. Returning a zero
-    # penalty in that pre-init window is preferable to aborting the save.
+    # Delivery: inject directly at the getDeliveryModePenalty function entry.
     delivery_count = 0
+    delivery_pattern = re.compile(
+        r'(?m)^(?P<indent>[ \t]*)M\.getDeliveryModePenalty[ \t]*=[ \t]*function\(onlyVehIdsAsKeys\)[ \t]*$'
+    )
     for path in list(entries):
         if not path.endswith("/delivery/general.lua"):
             continue
@@ -496,55 +497,79 @@ def patch_rls_039_final_runtime_guards(entries: dict[str, bytes]) -> None:
         except UnicodeDecodeError:
             continue
 
-        needle = "M.getDeliveryModePenalty = function(onlyVehIdsAsKeys)\n"
-        if needle in text and "delivery submodules not ready; returning zero penalty" not in text:
-            replacement = (
-                needle
-                + "  if not dParcelManager then dParcelManager = career_modules_delivery_parcelManager end\n"
-                + "  if not dVehicleTasks then dVehicleTasks = career_modules_delivery_vehicleTasks end\n"
-                + "  if not dParcelManager or not dVehicleTasks then\n"
-                + "    log(\"W\", \"RLSCareerMP39\", \"delivery submodules not ready; returning zero penalty\")\n"
-                + "    return {money = 0}\n"
-                + "  end\n"
+        if "delivery submodules not ready; returning zero penalty" in text:
+            continue
+
+        def delivery_repl(match):
+            i = match.group("indent")
+            return (
+                match.group(0) + "\n"
+                + i + "  dParcelManager = dParcelManager or career_modules_delivery_parcelManager\n"
+                + i + "  dVehicleTasks = dVehicleTasks or career_modules_delivery_vehicleTasks\n"
+                + i + "  if not dParcelManager or not dVehicleTasks then\n"
+                + i + "    log(\"W\", \"RLSCareerMP39\", \"delivery submodules not ready; returning zero penalty\")\n"
+                + i + "    return {money = 0}\n"
+                + i + "  end"
             )
-            text = text.replace(needle, replacement, 1)
-            entries[path] = text.encode("utf-8")
-            delivery_count += 1
+
+        text2, count = delivery_pattern.subn(delivery_repl, text, count=1)
+        if count:
+            entries[path] = text2.encode("utf-8")
+            delivery_count += count
             print(f"BeamNG 0.39 delivery penalty guard applied: {path}")
 
-    if delivery_count == 0:
-        print("BeamNG 0.39 delivery penalty guard: no matching final file needed changes")
-
-    # Racing-team modules in the older RLS package declare hard dependencies on
-    # event-flow modules that are no longer reliable during 0.39 startup. Let the
-    # modules load and resolve optional event integrations lazily instead.
+    # Racing team: remove stale dependencies wherever they appear inside the
+    # dependency declaration. Do not depend on exact comma/quote formatting.
     racing_count = 0
     stale_deps = (
         "gameplay_events_freContracts_state",
         "gameplay_events_freeroam_competitiveTrackFlow",
     )
     for path in list(entries):
-        lower = path.lower()
-        if "racingteam" not in lower or not path.endswith(".lua"):
+        if "racingteam" not in path.lower() or not path.endswith(".lua"):
             continue
         try:
             text = entries[path].decode("utf-8").replace("\r\n", "\n")
         except UnicodeDecodeError:
             continue
+
         original = text
         for dep in stale_deps:
-            text = text.replace(f'\"{dep}\", ', "")
-            text = text.replace(f"'{dep}', ", "")
-            text = text.replace(f', \"{dep}\"', "")
-            text = text.replace(f", '{dep}'", "")
-            text = text.replace(f'{{\"{dep}\"}}', "{}")
-            text = text.replace(f"{{'{dep}'}}", "{}")
+            text = re.sub(
+                rf'([{{,][ \t]*)(["\x27]){re.escape(dep)}\2[ \t]*,[ \t]*',
+                r'\1',
+                text,
+            )
+            text = re.sub(
+                rf',[ \t]*(["\x27]){re.escape(dep)}\1([ \t]*}})',
+                r'\2',
+                text,
+            )
+            text = re.sub(
+                rf'{{[ \t]*(["\x27]){re.escape(dep)}\1[ \t]*}}',
+                '{}',
+                text,
+            )
+
         if text != original:
             entries[path] = text.encode("utf-8")
             racing_count += 1
             print(f"BeamNG 0.39 removed stale racing-team hard dependency: {path}")
 
-    print(f"BeamNG 0.39 final runtime guards summary: reputation={rep_count}, delivery={delivery_count}, racing={racing_count}")
+    print(
+        "BeamNG 0.39 final runtime guards summary: "
+        f"reputation={rep_count}, delivery={delivery_count}, racing={racing_count}"
+    )
+
+    # These three fixes are required for the current 0.39 integration. Fail at
+    # build time rather than silently shipping an unpatched archive.
+    if rep_count == 0:
+        raise RuntimeError("Final 0.39 reputation guard matched zero files")
+    if delivery_count == 0:
+        raise RuntimeError("Final 0.39 delivery guard matched zero files")
+    if racing_count == 0:
+        raise RuntimeError("Final 0.39 racing-team dependency guard matched zero files")
+
 
 
 def patch_rls_online_save_timing(entries: dict[str, bytes]) -> None:
