@@ -443,6 +443,866 @@ end
             print(f"BeamNG 0.39 removed stale racingTeamRaceFlow dependency: {business_path}")
 
 
+def patch_rls_039_final_runtime_guards(entries: dict[str, bytes]) -> None:
+    """Final-pass guards for files that are sensitive to RLS override precedence."""
+
+    # Reputation: patch every final reputation.lua copy, regardless of whether it
+    # originated from /career/modules or /overrides/career/modules.
+    rep_count = 0
+    rep_pattern = re.compile(
+        r'(?m)^(?P<indent>\s*)local\s+value\s*=\s*career_modules_playerAttributes\.getAttributeValue\(organization\.id\s*\.\.\s*["\']Reputation["\']\)\s*    """Defer event-completion saves that desync online jobs and freeroam events.
+
+    RLS 2.6.4 MP builds had these mission/freeroam save calls commented out.
+    In current RLS 2.6.x builds they are enabled, and in CareerMP/BeamMP sessions they can
+    fire while rewards, mission cleanup, or the next freeroam event are still
+    being synchronized. Keep normal single-player autosave behavior, but do not
+    call saveCurrent immediately from these callbacks during an MP session.
+    """
+
+    beam_eats_path = "lua/ge/extensions/gameplay/beamEats.lua"
+    beam_eats = entries.get(beam_eats_path)
+    if beam_eats:
+        text = beam_eats.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required_unless(
+            text,
+            "    if career_career.isAutosaveEnabled() then\n"
+            "        career_saveSystem.saveCurrent()\n"
+            "    end\n",
+            "    -- In online CareerMP, saving inside completion can desync job cleanup/reward state.\n"
+            "    if career_career.isAutosaveEnabled() and not (MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession()) then\n"
+            "        career_saveSystem.saveCurrent()\n"
+            "    end\n",
+            beam_eats_path,
+            "RLS BeamEats online save timing guard",
+            "saving inside completion can desync job cleanup/reward state",
+        )
+        entries[beam_eats_path] = text.encode("utf-8")
+
+    race_session_path = "lua/ge/extensions/gameplay/events/freeroam/raceSession.lua"
+    race_session = entries.get(race_session_path)
+    if race_session:
+        text = race_session.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required_unless(
+            text,
+            "            career_saveSystem.saveCurrent()\n",
+            "            -- RLS 2.6.4 MP avoided immediate saves here; keep that behavior online.\n"
+            "            if not (MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession()) then\n"
+            "                career_saveSystem.saveCurrent()\n"
+            "            end\n",
+            race_session_path,
+            "RLS freeroam race reward online save timing guard",
+            "RLS 2.6.4 MP avoided immediate saves here",
+        )
+        text = replace_required_unless(
+            text,
+            "    career_saveSystem.saveCurrent()\n"
+            "    notifyFreRaceCompleted(raceName, raceData, raceData.label, finishTime, vehId, completionMeta)\n",
+            "    -- Avoid saving mid-completion in online CareerMP; this can desync follow-up event state.\n"
+            "    if not (MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession()) then\n"
+            "        career_saveSystem.saveCurrent()\n"
+            "    end\n"
+            "    notifyFreRaceCompleted(raceName, raceData, raceData.label, finishTime, vehId, completionMeta)\n",
+            race_session_path,
+            "RLS freeroam completion online save timing guard",
+            "Avoid saving mid-completion in online CareerMP",
+        )
+        entries[race_session_path] = text.encode("utf-8")
+
+    mission_wrapper_path = "lua/ge/extensions/overrides/career/modules/missionWrapper.lua"
+    mission_wrapper = entries.get(mission_wrapper_path)
+    if mission_wrapper:
+        text = mission_wrapper.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required_unless(
+            text,
+            "local preMissionCycle = nil\n"
+            "\n"
+            "local function init() end\n",
+            "local preMissionCycle = nil\n"
+            "\n"
+            "local function shouldDeferCareerMPSave()\n"
+            "  return MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession()\n"
+            "end\n"
+            "\n"
+            "local function init() end\n",
+            mission_wrapper_path,
+            "RLS mission wrapper online save guard helper",
+            "local function shouldDeferCareerMPSave()",
+        )
+        text = replace_required(
+            text,
+            "local function saveMission(id)\n"
+            "  cacheMissionData(id)\n"
+            "  career_saveSystem.saveCurrent()\n"
+            "end\n",
+            "local function saveMission(id)\n"
+            "  cacheMissionData(id)\n"
+            "  if not shouldDeferCareerMPSave() then\n"
+            "    career_saveSystem.saveCurrent()\n"
+            "  end\n"
+            "end\n",
+            mission_wrapper_path,
+            "RLS mission stop online save timing guard",
+        )
+        text = replace_required(
+            text,
+            "  if career_career.isAutosaveEnabled() then\n"
+            "    career_saveSystem.saveCurrent()\n"
+            "  else\n"
+            "    missionStartStep.handlingComplete = true\n"
+            "    missionStartStep = nil\n"
+            "  end\n",
+            "  if career_career.isAutosaveEnabled() and not shouldDeferCareerMPSave() then\n"
+            "    career_saveSystem.saveCurrent()\n"
+            "  else\n"
+            "    missionStartStep.handlingComplete = true\n"
+            "    missionStartStep = nil\n"
+            "  end\n",
+            mission_wrapper_path,
+            "RLS mission start online save timing guard",
+        )
+        entries[mission_wrapper_path] = text.encode("utf-8")
+
+
+def patch_careermp_entries(entries: dict[str, bytes]) -> None:
+    """Apply small generated safety fixes to CareerMP files.
+
+    CareerMP's drag display sync broadcasts txClearAll while the display module
+    is initializing. RLS reloads drag display state aggressively to keep online
+    drag races alive, and that clear broadcast can echo back late and wipe the
+    second drag attempt. Keep the network clear for real race resets, but
+    suppress it during module initialization and ignore stale remote clears
+    while a local drag race is already active.
+    """
+
+    enabler_path = "lua/ge/extensions/careerMPEnabler.lua"
+    enabler = entries.get(enabler_path)
+    if enabler:
+        text = enabler.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required_unless(
+            text,
+            "local nickname = MPConfig.getNickname()\n",
+            "local function getMPNickname()\n"
+            "\tif MPConfig and MPConfig.getNickname then\n"
+            "\t\tlocal ok, value = pcall(MPConfig.getNickname)\n"
+            "\t\tif ok and value and value ~= \"\" then\n"
+            "\t\t\treturn value\n"
+            "\t\tend\n"
+            "\tend\n"
+            "\treturn \"\"\n"
+            "end\n"
+            "\n"
+            "local nickname = getMPNickname()\n",
+            enabler_path,
+            "CareerMP enabler MPConfig early-load guard",
+            "local function getMPNickname()",
+        )
+        text = replace_required_unless(
+            text,
+            "\tnickname = MPConfig.getNickname()\n",
+            "\tnickname = getMPNickname()\n",
+            enabler_path,
+            "CareerMP enabler MPConfig sync guard",
+            "\tnickname = getMPNickname()\n",
+        )
+        entries[enabler_path] = text.encode("utf-8")
+
+    payments_path = "lua/ge/extensions/careerMPPlayerPayments.lua"
+    payments = entries.get(payments_path)
+    if payments:
+        text = payments.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required_unless(
+            text,
+            "local nickname = MPConfig.getNickname()\n",
+            "local function getMPNickname()\n"
+            "\tif MPConfig and MPConfig.getNickname then\n"
+            "\t\tlocal ok, value = pcall(MPConfig.getNickname)\n"
+            "\t\tif ok and value and value ~= \"\" then\n"
+            "\t\t\treturn value\n"
+            "\t\tend\n"
+            "\tend\n"
+            "\treturn \"\"\n"
+            "end\n"
+            "\n"
+            "local nickname = getMPNickname()\n",
+            payments_path,
+            "CareerMP payments MPConfig early-load guard",
+            "local function getMPNickname()",
+        )
+        text = replace_required_unless(
+            text,
+            "\t\tnickname = MPConfig.getNickname()\n",
+            "\t\tnickname = getMPNickname()\n",
+            payments_path,
+            "CareerMP payments MPConfig world-ready guard",
+            "\t\tnickname = getMPNickname()\n",
+        )
+        entries[payments_path] = text.encode("utf-8")
+
+    display_path = "lua/ge/extensions/gameplay/drag/display.lua"
+    display = entries.get(display_path)
+    if display:
+        text = display.decode("utf-8").replace("\r\n", "\n")
+        text = text.replace(
+            '  if MPVehicleGE.isOwn(be:getPlayerVehicleID(0)) then\n'
+            '    TriggerServerEvent("txClearDisplay", "")\n'
+            "  end\n",
+            '  if MPVehicleGE.isOwn(be:getPlayerVehicleID(0)) and not rawget(_G, "RLSCareerMP_SuppressDragClearBroadcast") then\n'
+            '    TriggerServerEvent("txClearDisplay", "")\n'
+            "  end\n",
+        )
+        text = text.replace(
+            '  if MPVehicleGE.isOwn(be:getPlayerVehicleID(0)) then\n'
+            '    TriggerServerEvent("txClearAll", "")\n'
+            "  end\n",
+            '  if MPVehicleGE.isOwn(be:getPlayerVehicleID(0)) and not rawget(_G, "RLSCareerMP_SuppressDragClearBroadcast") then\n'
+            '    TriggerServerEvent("txClearAll", "")\n'
+            "  end\n",
+        )
+        text = text.replace(
+            "  init()\n"
+            "  clearAll()\n",
+            "  init()\n"
+            '  local previousSuppressClear = rawget(_G, "RLSCareerMP_SuppressDragClearBroadcast")\n'
+            "  _G.RLSCareerMP_SuppressDragClearBroadcast = true\n"
+            "  clearAll()\n"
+            "  _G.RLSCareerMP_SuppressDragClearBroadcast = previousSuppressClear\n",
+        )
+        entries[display_path] = text.encode("utf-8")
+
+    sync_path = "lua/ge/extensions/careerMPDragDisplays.lua"
+    sync = entries.get(sync_path)
+    if sync:
+        text = sync.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required(
+            text,
+            "local driverLightBlinkState = {\n"
+            "\tlane = nil,\n"
+            "\tisBlinking = false,\n"
+            "\ttimer = 0,\n"
+            "\tfrequency = 1/6,\n"
+            "\tisOn = false\n"
+            "}\n"
+            "\n",
+            "local driverLightBlinkState = {\n"
+            "\tlane = nil,\n"
+            "\tisBlinking = false,\n"
+            "\ttimer = 0,\n"
+            "\tfrequency = 1/6,\n"
+            "\tisOn = false\n"
+            "}\n"
+            "\n"
+            "local function hasLocalDragRaceActive()\n"
+            "\tif rawget(_G, \"RLSCareerMP_LocalDragOwnerVehId\") then\n"
+            "\t\treturn true\n"
+            "\tend\n"
+            "\tif not (gameplay_drag_general and gameplay_drag_general.getData) then\n"
+            "\t\treturn false\n"
+            "\tend\n"
+            "\tlocal ok, currentDragData = pcall(gameplay_drag_general.getData)\n"
+            "\tif not ok or not currentDragData or not currentDragData.racers then\n"
+            "\t\treturn false\n"
+            "\tend\n"
+            "\tlocal playerVehId = be and be.getPlayerVehicleID and be:getPlayerVehicleID(0) or nil\n"
+            "\tfor vehId, racer in pairs(currentDragData.racers) do\n"
+            "\t\tif racer and (racer.isPlayable or vehId == playerVehId) then\n"
+            "\t\t\treturn true\n"
+            "\t\tend\n"
+            "\tend\n"
+            "\treturn false\n"
+            "end\n"
+            "\n"
+            "local function isOwnServerVehicle(serverVehicleID)\n"
+            "\tif not (serverVehicleID and MPVehicleGE and MPVehicleGE.getGameVehicleID and MPVehicleGE.isOwn) then\n"
+            "\t\treturn false\n"
+            "\tend\n"
+            "\tlocal gameVehicleID = MPVehicleGE.getGameVehicleID(serverVehicleID)\n"
+            "\treturn gameVehicleID and MPVehicleGE.isOwn(gameVehicleID) or false\n"
+            "end\n"
+            "\n"
+            "local function shouldAdoptRemoteDragData(decodedData)\n"
+            "\tif not decodedData or not decodedData.dragData then\n"
+            "\t\treturn false\n"
+            "\tend\n"
+            "\tif decodedData.serverVehicleID and isOwnServerVehicle(decodedData.serverVehicleID) then\n"
+            "\t\treturn true\n"
+            "\tend\n"
+            "\treturn not hasLocalDragRaceActive()\n"
+            "end\n"
+            "\n",
+            sync_path,
+            "CareerMP drag display local session guard",
+        )
+        text = text.replace(
+            "\tif gameplay_drag_general then\n"
+            "\t\tif not dragData then\n"
+            "\t\t\tgameplay_drag_general.setDragRaceData(decodedData.dragData)\n"
+            "\t\t\tdragData = gameplay_drag_general.getData()\n"
+            "\t\tend\n"
+            "\tend\n",
+            "\tif gameplay_drag_general then\n"
+            "\t\tif not dragData and shouldAdoptRemoteDragData(decodedData) then\n"
+            "\t\t\tgameplay_drag_general.setDragRaceData(decodedData.dragData)\n"
+            "\t\t\tdragData = gameplay_drag_general.getData()\n"
+            "\t\telseif not dragData then\n"
+            "\t\t\treturn\n"
+            "\t\tend\n"
+            "\tend\n",
+        )
+        text = text.replace(
+            "local function rxClearAll()\n"
+            "\tif not dragData then\n"
+            "\t\tdragData = gameplay_drag_general.getData()\n"
+            "\t\treturn\n"
+            "\tend\n",
+            "local function rxClearAll()\n"
+            "\tlocal localDragStarted = gameplay_drag_general and gameplay_drag_general.getDragIsStarted and gameplay_drag_general.getDragIsStarted()\n"
+            "\tif localDragStarted then\n"
+            "\t\treturn\n"
+            "\tend\n"
+            "\tif not dragData then\n"
+            "\t\tdragData = gameplay_drag_general and gameplay_drag_general.getData and gameplay_drag_general.getData() or nil\n"
+            "\t\tif not dragData then return end\n"
+            "\tend\n",
+        )
+        text = text.replace(
+            "\tclearLights()\n"
+            "\tclearDisplay()\n"
+            "\tgameplay_drag_general._clear()\n",
+            "\tlocal localDragStarted = gameplay_drag_general and gameplay_drag_general.getDragIsStarted and gameplay_drag_general.getDragIsStarted()\n"
+            "\tclearLights()\n"
+            "\tclearDisplay()\n"
+            "\tif gameplay_drag_general and gameplay_drag_general._clear and not localDragStarted then\n"
+            "\t\tgameplay_drag_general._clear()\n"
+            "\tend\n"
+            "\tdragData = nil\n",
+        )
+        entries[sync_path] = text.encode("utf-8")
+
+    player_list_path = "ui/modules/apps/CareerMP-PlayerList/app.js"
+    player_list = entries.get(player_list_path)
+    if player_list:
+        text = player_list.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required_unless(
+            text,
+            "let pingList = [];\n",
+            "var pingList = [];\n",
+            player_list_path,
+            "CareerMP player list repeat-safe ping list global",
+            "var pingList = [];\n",
+        )
+        text = replace_required(
+            text,
+            "\tconst applyPlayerListStyle = function(useNewDesign) {\n",
+            "\tconst hideContextMenu = function() {\n"
+            "\t\tconst menu = document.getElementById(\"playerlist-contextmenu\");\n"
+            "\t\tif (menu) menu.style.display = \"none\";\n"
+            "\t};\n"
+            "\n"
+            "\tconst bindContextButton = function(id, action) {\n"
+            "\t\tconst button = document.getElementById(id);\n"
+            "\t\tif (!button) return;\n"
+            "\t\tbutton.onclick = function() {\n"
+            "\t\t\taction();\n"
+            "\t\t\thideContextMenu();\n"
+            "\t\t};\n"
+            "\t};\n"
+            "\n"
+            "\tconst applyPlayerListStyle = function(useNewDesign) {\n",
+            player_list_path,
+            "CareerMP player list context helpers",
+        )
+        text = replace_required_unless(
+            text,
+            "\t\tif (localStorage.getItem('plShown') == 1) showList();\n",
+            "\t\tshowList();\n"
+            "\t\tlocalStorage.setItem('plShown', 1);\n",
+            player_list_path,
+            "CareerMP player list auto-open on login",
+            "\t\tshowList();\n"
+            "\t\tlocalStorage.setItem('plShown', 1);\n"
+            "\t\tsetTimeout(showList, 250);\n",
+        )
+        text = replace_required(
+            text,
+            "\t\tlocalStorage.setItem('plShown', 1);\n"
+            "\t\tbngApi.engineLua(\"guihooks.trigger('updateCustomButtons', UI.getCustomButtonNames())\")\n",
+            "\t\tlocalStorage.setItem('plShown', 1);\n"
+            "\t\tsetTimeout(showList, 250);\n"
+            "\t\tsetTimeout(showList, 1000);\n"
+            "\t\tbngApi.engineLua(\"guihooks.trigger('updateCustomButtons', UI.getCustomButtonNames())\")\n",
+            player_list_path,
+            "CareerMP player list delayed auto-open retries",
+        )
+        text = replace_required(
+            text,
+            "\t\t\t\t\tdocument.getElementById(\"pl-context-Pay100000Button\").onclick = function() {\n"
+            "\t\t\t\t\t\tpayPlayer(parsedList[i].name, 100000);\n"
+            "\t\t\t\t\t}\n"
+            "\n",
+            "\t\t\t\t\tbindContextButton(\"pl-context-Pay100000Button\", function() {\n"
+            "\t\t\t\t\t\tpayPlayer(parsedList[i].name, 100000);\n"
+            "\t\t\t\t\t});\n"
+            "\n"
+            "\t\t\t\t\tbindContextButton(\"pl-context-QueueEventsButton\", function() {\n"
+            "\t\t\t\t\t\tapplyQueuesForPlayer(parsedList[i].id);\n"
+            "\t\t\t\t\t});\n"
+            "\n"
+            "\t\t\t\t\tbindContextButton(\"pl-context-RestoreVehicles\", function() {\n"
+            "\t\t\t\t\t\trestorePlayerVehicle(parsedList[i].name);\n"
+            "\t\t\t\t\t});\n"
+            "\n"
+            "\t\t\t\t\tbindContextButton(\"pl-context-ForceResyncVehicles\", function() {\n"
+            "\t\t\t\t\t\tforceResyncPlayerVehicles(parsedList[i].name);\n"
+            "\t\t\t\t\t});\n"
+            "\n"
+            "\t\t\t\t\tbindContextButton(\"pl-context-OpenProfileButton\", function() {\n"
+            "\t\t\t\t\t\tviewPlayer(parsedList[i].name);\n"
+            "\t\t\t\t\t});\n"
+            "\n",
+            player_list_path,
+            "CareerMP player list queue context menu",
+        )
+        text = replace_required(
+            text,
+            "function payPlayer(targetPlayerName, amount) {\n"
+            "\tbngApi.engineLua('careerMPPlayerPayments.payPlayer(\"' + targetPlayerName + '\", ' + amount + ')')\n"
+            "}\n"
+            "\n",
+            "function payPlayer(targetPlayerName, amount) {\n"
+            "\tbngApi.engineLua('careerMPPlayerPayments.payPlayer(\"' + targetPlayerName + '\", ' + amount + ')')\n"
+            "}\n"
+            "\n"
+            "function viewPlayer(targetPlayerName) {\n"
+            "\topenExternalLink(`https://forum.beammp.com/u/${targetPlayerName}/summary`)\n"
+            "}\n"
+            "\n"
+            "function restorePlayerVehicle(targetPlayerName) {\n"
+            "\tbngApi.engineLua('MPVehicleGE.restorePlayerVehicle(\"' + targetPlayerName + '\")')\n"
+            "}\n"
+            "\n"
+            "function forceResyncPlayerVehicles(targetPlayerName) {\n"
+            "\tbngApi.engineLua('careerMPEnabler.forceResyncPlayerVehicles(\"' + targetPlayerName + '\")')\n"
+            "}\n"
+            "\n"
+            "function applyQueuesForPlayer(targetPlayerID) {\n"
+            "\tvar numericPlayerId = parseInt(targetPlayerID, 10);\n"
+            "\tif (isNaN(numericPlayerId)) return;\n"
+            "\tbngApi.engineLua('MPVehicleGE.applyPlayerQueues(' + numericPlayerId + ')')\n"
+            "}\n"
+            "\n",
+            player_list_path,
+            "CareerMP player list BeamMP helper functions",
+        )
+        entries[player_list_path] = text.encode("utf-8")
+
+    ui_apps_path = "lua/ge/extensions/careerMPUIApps.lua"
+    ui_apps = entries.get(ui_apps_path)
+    if ui_apps:
+        text = ui_apps.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required_unless(
+            text,
+            "\tmultiseatscenario = { filename = \"multiseatscenario\" },\n",
+            "\tmultiseatscenario = { filename = \"multiseatscenario\" },\n"
+            "\tmultiplayer = { filename = \"multiplayer\" },\n",
+            ui_apps_path,
+            "CareerMP UI multiplayer layout coverage",
+            "\tmultiplayer = { filename = \"multiplayer\" },\n",
+        )
+        text = replace_required(
+            text,
+            "\tif not firstIndex then\n"
+            "\t\ttable.insert(layout.apps, deepcopy(appData))\n"
+            "\t\treturn true\n"
+            "\tend\n"
+            "\treturn removed\n",
+            "\tif not firstIndex then\n"
+            "\t\ttable.insert(layout.apps, deepcopy(appData))\n"
+            "\t\treturn true\n"
+            "\tend\n"
+            "\tlocal existing = layout.apps[firstIndex]\n"
+            "\tlocal changedPlacement = false\n"
+            "\tif appData.placement then\n"
+            "\t\texisting.placement = deepcopy(appData.placement)\n"
+            "\t\tchangedPlacement = true\n"
+            "\tend\n"
+            "\treturn removed or changedPlacement\n",
+            ui_apps_path,
+            "CareerMP UI app placement refresh",
+        )
+        entries[ui_apps_path] = text.encode("utf-8")
+
+    player_list_html_path = "ui/modules/apps/CareerMP-PlayerList/app.html"
+    player_list_html = entries.get(player_list_html_path)
+    if player_list_html:
+        text = player_list_html.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required(
+            text,
+            "\t\t<button id=\"pl-context-Pay100000Button\">Pay $100000</button>\n",
+            "\t\t<button id=\"pl-context-Pay100000Button\">Pay $100000</button>\n"
+            "\t\t<button id=\"pl-context-QueueEventsButton\">Queue Events</button>\n"
+            "\t\t<button id=\"pl-context-RestoreVehicles\">Restore Vehicles</button>\n"
+            "\t\t<button id=\"pl-context-ForceResyncVehicles\">Force Re-Sync Vehicles</button>\n"
+            "\t\t<button id=\"pl-context-OpenProfileButton\">Open Profile</button>\n",
+            player_list_html_path,
+            "CareerMP player list BeamMP context buttons",
+        )
+        text = replace_required(
+            text,
+            "\t\t<button class=\"buttons\" id=\"show-button\" onclick=\"toggleList()\">&lt;</button>\n",
+            "\t\t<button class=\"buttons\" id=\"show-button\" onclick=\"toggleList()\">&lt;</button>\n"
+            f"\t\t<div id=\"rls-careermp-patch-version\" title=\"If this does not say {PATCH_VERSION}, clear your BeamMP client mod cache and rejoin.\" style=\"font-size: 10px; color: #ff8c2a; background: rgba(0, 0, 0, 0.65); padding: 2px 5px; margin-top: 2px; border-left: 2px solid #ff8c2a; white-space: nowrap;\">RLS CareerMP Patch {PATCH_VERSION}</div>\n",
+            player_list_html_path,
+            "CareerMP player list visible patch version marker",
+        )
+        entries[player_list_html_path] = text.encode("utf-8")
+
+    entries["rls_careermp_patch_version.txt"] = (
+        f"RLS CareerMP Compatibility Patch {PATCH_VERSION}\n"
+        "Queue apply is manual by default in this build.\n"
+        "Force Re-Sync Vehicles is available from the player list context menu.\n"
+    ).encode("utf-8")
+
+
+def patch_rls_entries(
+    entries: dict[str, bytes],
+    output_name: str,
+    *,
+    apply_legacy_online_save_timing: bool = True,
+    apply_legacy_override_manager_patch: bool = True,
+) -> None:
+    """Keep BeamNG mod metadata aligned with the generated compatibility zip.
+
+    The legacy online save-timing rewrites target the older 0.38-era RLS source
+    layout and are intentionally optional for the BeamNG 0.39 port.
+    """
+
+    patch_rls_039_save_api(entries)
+    patch_rls_039_player_attributes(entries)
+    patch_rls_039_runtime_api_guards(entries)
+    patch_rls_039_batch_compat(entries)
+    patch_rls_039_final_runtime_guards(entries)
+    if apply_legacy_online_save_timing:
+        patch_rls_online_save_timing(entries)
+    else:
+        print("Skipping legacy 0.38 online save-timing text patches for BeamNG 0.39 build")
+
+    override_manager_path = "lua/ge/extensions/overhaul/overrideManager.lua"
+    override_manager = entries.get(override_manager_path)
+    if override_manager and apply_legacy_override_manager_patch:
+        text = override_manager.decode("utf-8").replace("\r\n", "\n")
+        text = replace_required(
+            text,
+            "local originalLoad = nil\n"
+            "local originalReload = nil\n",
+            "local originalLoad = nil\n"
+            "local originalReload = nil\n"
+            "local originalIsExtensionLoaded = nil\n",
+            override_manager_path,
+            "RLS override manager isExtensionLoaded storage",
+        )
+        text = replace_required(
+            text,
+            "local function clearDirectory(dirPath)\n",
+            "local function extensionGlobalName(path)\n"
+            "  return (path or ''):gsub('[^%w_]', '_')\n"
+            "end\n"
+            "\n"
+            "local function exposeOriginalExtensionGlobal(entry)\n"
+            "  if not entry or not entry.isExtension then\n"
+            "    return\n"
+            "  end\n"
+            "\n"
+            "  local originalGlobal = extensionGlobalName(entry.originalFormat)\n"
+            "  if rawget(_G, originalGlobal) then\n"
+            "    return\n"
+            "  end\n"
+            "\n"
+            "  local module = rawget(_G, extensionGlobalName(entry.override)) or rawget(_G, extensionGlobalName(entry.convertedFormat))\n"
+            "  if not module then\n"
+            "    local success, result = pcall(require, entry.override)\n"
+            "    if success then\n"
+            "      module = result\n"
+            "    end\n"
+            "  end\n"
+            "\n"
+            "  if module then\n"
+            "    rawset(_G, originalGlobal, module)\n"
+            "  end\n"
+            "end\n"
+            "\n"
+            "local function overrideIsExtensionLoaded(extPath)\n"
+            "  if originalIsExtensionLoaded and originalIsExtensionLoaded(extPath) then\n"
+            "    return true\n"
+            "  end\n"
+            "\n"
+            "  local entry = overrides[extPath]\n"
+            "  if not entry then\n"
+            "    return false\n"
+            "  end\n"
+            "\n"
+            "  if originalIsExtensionLoaded and (originalIsExtensionLoaded(entry.override) or originalIsExtensionLoaded(entry.convertedFormat)) then\n"
+            "    exposeOriginalExtensionGlobal(entry)\n"
+            "    return true\n"
+            "  end\n"
+            "\n"
+            "  if rawget(_G, extensionGlobalName(entry.originalFormat)) or rawget(_G, extensionGlobalName(entry.override)) then\n"
+            "    exposeOriginalExtensionGlobal(entry)\n"
+            "    return true\n"
+            "  end\n"
+            "\n"
+            "  return false\n"
+            "end\n"
+            "\n"
+            "local function clearDirectory(dirPath)\n",
+            override_manager_path,
+            "RLS override manager original extension aliases",
+        )
+        text = replace_required(
+            text,
+            "  return originalLoad(unpack(modifiedArgs))\n"
+            "end\n",
+            "  local result = originalLoad(unpack(modifiedArgs))\n"
+            "  for _, arg in ipairs(args) do\n"
+            "    if type(arg) == 'string' then\n"
+            "      exposeOriginalExtensionGlobal(overrides[arg])\n"
+            "    end\n"
+            "  end\n"
+            "  return result\n"
+            "end\n",
+            override_manager_path,
+            "RLS override manager exposes original extension globals after load",
+        )
+        text = replace_required(
+            text,
+            "  if originalReload then\n"
+            "    extensions.reload = overrideReload\n"
+            "  end\n"
+            "\n"
+            "  local overridesDir = '/lua/ge/extensions/overrides/'\n",
+            "  if originalReload then\n"
+            "    extensions.reload = overrideReload\n"
+            "  end\n"
+            "\n"
+            "  originalIsExtensionLoaded = extensions.isExtensionLoaded\n"
+            "  if originalIsExtensionLoaded then\n"
+            "    extensions.isExtensionLoaded = overrideIsExtensionLoaded\n"
+            "  end\n"
+            "\n"
+            "  local overridesDir = '/lua/ge/extensions/overrides/'\n",
+            override_manager_path,
+            "RLS override manager wraps isExtensionLoaded",
+        )
+        text = replace_required(
+            text,
+            "  extensions.reload = originalReload\n"
+            "  originalReload = nil\n"
+            "\n"
+            "  local pathsToClear = {}\n",
+            "  extensions.reload = originalReload\n"
+            "  originalReload = nil\n"
+            "\n"
+            "  if originalIsExtensionLoaded then\n"
+            "    extensions.isExtensionLoaded = originalIsExtensionLoaded\n"
+            "    originalIsExtensionLoaded = nil\n"
+            "  end\n"
+            "\n"
+            "  local pathsToClear = {}\n",
+            override_manager_path,
+            "RLS override manager restores isExtensionLoaded",
+        )
+        entries[override_manager_path] = text.encode("utf-8")
+    elif override_manager and not apply_legacy_override_manager_patch:
+        print("Skipping legacy overrideManager.lua text patches for BeamNG 0.39 build")
+
+    info = entries.get(RLS_INFO_PATH)
+    if not info:
+        return
+
+    data = json.loads(info.decode("utf-8-sig"))
+    data["filename"] = output_name
+    entries[RLS_INFO_PATH] = (json.dumps(data, ensure_ascii=False, indent=4) + "\n").encode("utf-8")
+
+
+def build_mod(
+    base_zip: Path,
+    patch_dir: Path,
+    output_zip: Path,
+    remove_prefixes: tuple[str, ...] = (),
+    zip_engine: str = "auto",
+    *,
+    apply_legacy_online_save_timing: bool = True,
+    apply_legacy_override_manager_patch: bool = True,
+) -> tuple[int, str]:
+    entries = read_careermp_entries(base_zip) if patch_dir.name == "CareerMP" else read_zip_entries(base_zip)
+    remove_entry_prefixes(entries, remove_prefixes)
+    overlay_directory(entries, patch_dir)
+    if patch_dir.name == "CareerMP":
+        patch_careermp_entries(entries)
+    elif patch_dir.name == "RLS":
+        patch_rls_entries(
+            entries,
+            output_zip.name,
+            apply_legacy_online_save_timing=apply_legacy_online_save_timing,
+            apply_legacy_override_manager_patch=apply_legacy_override_manager_patch,
+        )
+    print(f"Writing ZIP: {output_zip}")
+    print(f"  files: {len(entries)}")
+    print(f"  engine: {describe_zip_engine(zip_engine)}")
+    write_zip(output_zip, entries, engine=zip_engine)
+    print(f"Finished ZIP: {output_zip}")
+    return output_zip.stat().st_size, sha256sum(output_zip)
+
+
+def main() -> int:
+    repo_root = Path(__file__).resolve().parent.parent
+
+    parser = argparse.ArgumentParser(description="Build the CareerMP-compatible RLS release zips.")
+    parser.add_argument("--rls-original", required=True, type=Path, help="Path to the original rls_career_overhaul zip")
+    parser.add_argument("--careermp-original", required=True, type=Path, help="Path to the original CareerMP.zip")
+    parser.add_argument("--out-dir", type=Path, default=repo_root / "built", help="Output directory for the generated zips")
+    add_zip_engine_argument(parser)
+    args = parser.parse_args()
+
+    rls_original = args.rls_original.expanduser().resolve()
+    careermp_original = args.careermp_original.expanduser().resolve()
+    out_dir = args.out_dir.expanduser().resolve()
+
+    if not rls_original.is_file():
+        raise SystemExit(f"RLS original zip not found: {rls_original}")
+    if not careermp_original.is_file():
+        raise SystemExit(f"CareerMP original zip not found: {careermp_original}")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    rls_patch_dir = repo_root / "patches" / "RLS"
+    careermp_patch_dir = repo_root / "patches" / "CareerMP"
+
+    rls_out = out_dir / f"{rls_original.stem}_careermp_compatible.zip"
+    careermp_out = out_dir / "CareerMP.zip"
+
+    rls_size, rls_hash = build_mod(rls_original, rls_patch_dir, rls_out, RLS_REMOVE_PREFIXES, args.zip_engine)
+    cmp_size, cmp_hash = build_mod(careermp_original, careermp_patch_dir, careermp_out, CAREERMP_REMOVE_PREFIXES, args.zip_engine)
+
+    checksums = out_dir / "checksums.txt"
+    checksums.write_text(
+        "\n".join(
+            [
+                f"{rls_hash}  {rls_out.name}",
+                f"{cmp_hash}  {careermp_out.name}",
+                "",
+                f"{rls_out.name} size={rls_size}",
+                f"{careermp_out.name} size={cmp_size}",
+                f"zip_engine={describe_zip_engine(args.zip_engine)}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    print(f"Built: {rls_out}")
+    print(f"Built: {careermp_out}")
+    print(f"Wrote: {checksums}")
+    print(f"Zip engine: {describe_zip_engine(args.zip_engine)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+    )
+    for path in list(entries):
+        if not path.endswith("/reputation.lua"):
+            continue
+        try:
+            text = entries[path].decode("utf-8").replace("\r\n", "\n")
+        except UnicodeDecodeError:
+            continue
+
+        def rep_repl(match):
+            indent = match.group("indent")
+            return (
+                indent + "local value = 0\n"
+                + indent + "if career_modules_playerAttributes and type(career_modules_playerAttributes.getAttributeValue) == \"function\" then\n"
+                + indent + "  local ok, result = pcall(career_modules_playerAttributes.getAttributeValue, organization.id .. \"Reputation\")\n"
+                + indent + "  if ok and type(result) == \"number\" then\n"
+                + indent + "    value = result\n"
+                + indent + "  else\n"
+                + indent + "    log(\"W\", \"RLSCareerMP39\", \"playerAttributes not ready while resolving reputation for \" .. tostring(organization.id) .. \"; using 0\")\n"
+                + indent + "  end\n"
+                + indent + "end"
+            )
+
+        new_text, count = rep_pattern.subn(rep_repl, text, count=1)
+        if count:
+            entries[path] = new_text.encode("utf-8")
+            rep_count += 1
+            print(f"BeamNG 0.39 final reputation guard applied: {path}")
+
+    if rep_count == 0:
+        print("BeamNG 0.39 final reputation guard: no matching direct reads remained")
+
+    # Delivery: getDeliveryModePenalty is called by save hooks even when the
+    # delivery submodules have not yet finished activation. Returning a zero
+    # penalty in that pre-init window is preferable to aborting the save.
+    delivery_count = 0
+    for path in list(entries):
+        if not path.endswith("/delivery/general.lua"):
+            continue
+        try:
+            text = entries[path].decode("utf-8").replace("\r\n", "\n")
+        except UnicodeDecodeError:
+            continue
+
+        needle = "M.getDeliveryModePenalty = function(onlyVehIdsAsKeys)\n"
+        if needle in text and "delivery submodules not ready; returning zero penalty" not in text:
+            replacement = (
+                needle
+                + "  if not dParcelManager then dParcelManager = career_modules_delivery_parcelManager end\n"
+                + "  if not dVehicleTasks then dVehicleTasks = career_modules_delivery_vehicleTasks end\n"
+                + "  if not dParcelManager or not dVehicleTasks then\n"
+                + "    log(\"W\", \"RLSCareerMP39\", \"delivery submodules not ready; returning zero penalty\")\n"
+                + "    return {money = 0}\n"
+                + "  end\n"
+            )
+            text = text.replace(needle, replacement, 1)
+            entries[path] = text.encode("utf-8")
+            delivery_count += 1
+            print(f"BeamNG 0.39 delivery penalty guard applied: {path}")
+
+    if delivery_count == 0:
+        print("BeamNG 0.39 delivery penalty guard: no matching final file needed changes")
+
+    # Racing-team modules in the older RLS package declare hard dependencies on
+    # event-flow modules that are no longer reliable during 0.39 startup. Let the
+    # modules load and resolve optional event integrations lazily instead.
+    racing_count = 0
+    stale_deps = (
+        "gameplay_events_freContracts_state",
+        "gameplay_events_freeroam_competitiveTrackFlow",
+    )
+    for path in list(entries):
+        lower = path.lower()
+        if "racingteam" not in lower or not path.endswith(".lua"):
+            continue
+        try:
+            text = entries[path].decode("utf-8").replace("\r\n", "\n")
+        except UnicodeDecodeError:
+            continue
+        original = text
+        for dep in stale_deps:
+            text = text.replace(f'\"{dep}\", ', "")
+            text = text.replace(f"'{dep}', ", "")
+            text = text.replace(f', \"{dep}\"', "")
+            text = text.replace(f", '{dep}'", "")
+            text = text.replace(f'{{\"{dep}\"}}', "{}")
+            text = text.replace(f"{{'{dep}'}}", "{}")
+        if text != original:
+            entries[path] = text.encode("utf-8")
+            racing_count += 1
+            print(f"BeamNG 0.39 removed stale racing-team hard dependency: {path}")
+
+    print(f"BeamNG 0.39 final runtime guards summary: reputation={rep_count}, delivery={delivery_count}, racing={racing_count}")
+
+
 def patch_rls_online_save_timing(entries: dict[str, bytes]) -> None:
     """Defer event-completion saves that desync online jobs and freeroam events.
 
