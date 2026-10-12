@@ -1103,6 +1103,7 @@ def patch_rls_entries(
     patch_rls_039_player_attributes(entries)
     patch_rls_039_runtime_api_guards(entries)
     patch_rls_039_batch_compat(entries)
+    patch_rls_039_final_runtime_guards(entries)
     if apply_legacy_online_save_timing:
         patch_rls_online_save_timing(entries)
     else:
