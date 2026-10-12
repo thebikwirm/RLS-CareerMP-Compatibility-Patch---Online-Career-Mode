@@ -446,43 +446,47 @@ end
 def patch_rls_039_final_runtime_guards(entries: dict[str, bytes]) -> None:
     """Final-pass guards for files sensitive to RLS override precedence."""
 
-    # Reputation: replace any direct organization reputation read, regardless of
-    # whitespace or quote style. This runs after all overlays are applied.
+    # Reputation/playerAttributes: wrap the exported getter in every final
+    # playerAttributes.lua copy. This is more reliable than patching a specific
+    # reputation.lua source because RLS's override manager can make different
+    # source copies win at runtime.
     rep_count = 0
-    rep_pattern = re.compile(
-        r'(?m)^(?P<indent>[ \t]*)local[ \t]+value[ \t]*=[ \t]*'
-        r'career_modules_playerAttributes\.getAttributeValue\('
-        r'organization\.id[ \t]*\.\.[ \t]*["\x27]Reputation["\x27]'
-        r'\)[ \t]*$'
-    )
+    wrapper_marker = "RLSCareerMP39 exported playerAttributes getter guard"
 
     for path in list(entries):
-        if not path.endswith("/reputation.lua"):
+        if not path.endswith("/playerAttributes.lua"):
             continue
         try:
             text = entries[path].decode("utf-8").replace("\r\n", "\n")
         except UnicodeDecodeError:
             continue
 
-        def rep_repl(match):
-            i = match.group("indent")
-            return (
-                i + "local value = 0\n"
-                + i + "if career_modules_playerAttributes and type(career_modules_playerAttributes.getAttributeValue) == \"function\" then\n"
-                + i + "  local ok, result = pcall(career_modules_playerAttributes.getAttributeValue, organization.id .. \"Reputation\")\n"
-                + i + "  if ok and type(result) == \"number\" then\n"
-                + i + "    value = result\n"
-                + i + "  else\n"
-                + i + "    log(\"W\", \"RLSCareerMP39\", \"playerAttributes not ready while resolving reputation for \" .. tostring(organization.id) .. \"; using 0\")\n"
-                + i + "  end\n"
-                + i + "end"
-            )
+        if wrapper_marker in text:
+            rep_count += 1
+            continue
 
-        text2, count = rep_pattern.subn(rep_repl, text)
-        if count:
-            entries[path] = text2.encode("utf-8")
-            rep_count += count
-            print(f"BeamNG 0.39 final reputation guard applied ({count}): {path}")
+        return_index = text.rfind("\nreturn M")
+        if return_index < 0:
+            continue
+
+        wrapper = '''\n-- RLSCareerMP39 exported playerAttributes getter guard
+local _rls39OriginalGetAttributeValue = M.getAttributeValue
+if type(_rls39OriginalGetAttributeValue) == "function" then
+  M.getAttributeValue = function(attributeName)
+    local ok, value = pcall(_rls39OriginalGetAttributeValue, attributeName)
+    if ok then
+      return value
+    end
+    log("W", "RLSCareerMP39", "playerAttributes not ready for " .. tostring(attributeName) .. "; using 0")
+    return 0
+  end
+end
+'''
+
+        text = text[:return_index] + wrapper + text[return_index:]
+        entries[path] = text.encode("utf-8")
+        rep_count += 1
+        print(f"BeamNG 0.39 final playerAttributes getter guard applied: {path}")
 
     # Delivery: inject directly at the getDeliveryModePenalty function entry.
     delivery_count = 0
@@ -564,7 +568,7 @@ def patch_rls_039_final_runtime_guards(entries: dict[str, bytes]) -> None:
     # These three fixes are required for the current 0.39 integration. Fail at
     # build time rather than silently shipping an unpatched archive.
     if rep_count == 0:
-        raise RuntimeError("Final 0.39 reputation guard matched zero files")
+        raise RuntimeError("Final 0.39 playerAttributes getter guard matched zero files")
     if delivery_count == 0:
         raise RuntimeError("Final 0.39 delivery guard matched zero files")
     if racing_count == 0:
