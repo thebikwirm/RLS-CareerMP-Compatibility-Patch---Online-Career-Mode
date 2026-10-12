@@ -73,7 +73,22 @@ end
         raise SystemExit(f"CareerMP input missing {patches_path}")
 
     text = payload.decode("utf-8").replace("\r\n", "\n")
-    old = """local function withRemoteVehiclesProtected(fn, ...)
+    old = """local function installRLS039RuntimeGuards()
+\tif career_modules_delivery_general and career_modules_delivery_general.getDeliveryModePenalty then
+\t\tif not career_modules_delivery_general.__careerMP39PenaltyGuard then
+\t\t\tlocal originalPenalty = career_modules_delivery_general.getDeliveryModePenalty
+\t\t\tcareer_modules_delivery_general.getDeliveryModePenalty = function(...)
+\t\t\t\tlocal ok, value = pcall(originalPenalty, ...)
+\t\t\t\tif ok then return value end
+\t\t\t\tlog("W", logTag, "delivery penalty requested before delivery modules were ready; using zero penalty")
+\t\t\t\treturn {money = 0}
+\t\t\tend
+\t\t\tcareer_modules_delivery_general.__careerMP39PenaltyGuard = true
+\t\tend
+\tend
+end
+
+local function withRemoteVehiclesProtected(fn, ...)
 \tinstallProtection()
 \tlocal results = {pcall(fn, ...)}
 \tremoveProtection()
@@ -89,10 +104,22 @@ end
 \tinstallProtection()
 
 \t-- RLS 2.6.x can query organization reputation while BeamNG is still
-\t-- activating career modules, before playerAttributes has initialized its
-\t-- backing table. Wrap the public read for the activation window so that an
-\t-- uninitialized attribute resolves to zero instead of aborting career start.
+\t-- activating career modules, before playerAttributes has initialized.
+\t-- The playerAttributes extension may not exist yet when this wrapper starts,
+\t-- so install a temporary organization-layer guard as well.
 \tlocal originalGetAttributeValue = nil
+\tlocal originalGetOrganizations = nil
+
+\tif freeroam_organizations and freeroam_organizations.getOrganizations then
+\t\toriginalGetOrganizations = freeroam_organizations.getOrganizations
+\t\tfreeroam_organizations.getOrganizations = function(...)
+\t\t\tlocal ok, value = pcall(originalGetOrganizations, ...)
+\t\t\tif ok then return value end
+\t\t\tlog("W", logTag, "organizations requested before playerAttributes was ready; returning empty organization list for this activation step")
+\t\t\treturn {}
+\t\tend
+\tend
+
 \tif career_modules_playerAttributes and career_modules_playerAttributes.getAttributeValue then
 \t\toriginalGetAttributeValue = career_modules_playerAttributes.getAttributeValue
 \t\tcareer_modules_playerAttributes.getAttributeValue = function(attributeName)
@@ -111,6 +138,9 @@ end
 
 \tif originalGetAttributeValue and career_modules_playerAttributes then
 \t\tcareer_modules_playerAttributes.getAttributeValue = originalGetAttributeValue
+\tend
+\tif originalGetOrganizations and freeroam_organizations then
+\t\tfreeroam_organizations.getOrganizations = originalGetOrganizations
 \tend
 \tremoveProtection()
 
