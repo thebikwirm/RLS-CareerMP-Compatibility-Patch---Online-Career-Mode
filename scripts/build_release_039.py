@@ -110,10 +110,21 @@ end
 \t-- so install a temporary organization-layer guard as well.
 \tlocal originalGetAttributeValue = nil
 \tlocal originalGetOrganizations = nil
-\tlocal organizationsExt = type(extensions) == "table" and rawget(extensions, "freeroam_organizations") or freeroam_organizations
-\tlocal playerAttributesExt = type(extensions) == "table" and rawget(extensions, "career_modules_playerAttributes") or career_modules_playerAttributes
+
+\t-- freeroam_organizations may not be loaded yet at the moment CareerMP enters
+\t-- the protected career-start call, but loans will use it moments later while
+\t-- the career module batch is being initialized. Load/resolve it now so we can
+\t-- install the temporary guard before that happens.
+\tlocal organizationsExt = type(extensions) == "table" and rawget(extensions, "freeroam_organizations") or nil
+\tif not organizationsExt and type(extensions) == "table" and type(extensions.load) == "function" then
+\t\tpcall(extensions.load, "freeroam_organizations")
+\t\torganizationsExt = rawget(extensions, "freeroam_organizations")
+\tend
+
+\tlocal playerAttributesExt = type(extensions) == "table" and rawget(extensions, "career_modules_playerAttributes") or nil
 
 \tif organizationsExt and organizationsExt.getOrganizations then
+\t\tlog("I", logTag, "installed temporary organizations guard before career activation")
 \t\toriginalGetOrganizations = organizationsExt.getOrganizations
 \t\torganizationsExt.getOrganizations = function(...)
 \t\t\tlocal ok, value = pcall(originalGetOrganizations, ...)
