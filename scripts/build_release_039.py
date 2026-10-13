@@ -110,6 +110,37 @@ end
 \t-- so install a temporary organization-layer guard as well.
 \tlocal originalGetAttributeValue = nil
 \tlocal originalGetOrganizations = nil
+\tlocal originalExtensionsLoad = nil
+
+\t-- Old RLS career.lua passes the whole career module list to extensions.load()
+\t-- in filesystem enumeration order. Intercept that one batch during career
+\t-- activation and put playerAttributes/reputation/delivery support ahead of
+\t-- loans and the rest.
+\tif type(extensions) == "table" and type(extensions.load) == "function" then
+\t\toriginalExtensionsLoad = extensions.load
+\t\textensions.load = function(arg, ...)
+\t\t\tif type(arg) == "table" then
+\t\t\t\tlocal priority = {
+\t\t\t\t\tcareer_modules_playerAttributes = 0,
+\t\t\t\t\tcareer_modules_reputation = 10,
+\t\t\t\t\tcareer_modules_delivery_parcelManager = 20,
+\t\t\t\t\tcareer_modules_delivery_vehicleTasks = 21,
+\t\t\t\t\tcareer_modules_delivery_generator = 22,
+\t\t\t\t\tcareer_modules_delivery_progress = 23,
+\t\t\t\t\tcareer_modules_delivery_general = 30,
+\t\t\t\t\tcareer_modules_loans = 40,
+\t\t\t\t}
+\t\t\t\ttable.sort(arg, function(a, b)
+\t\t\t\t\tlocal pa = priority[a] or 100
+\t\t\t\t\tlocal pb = priority[b] or 100
+\t\t\t\t\tif pa == pb then return tostring(a) < tostring(b) end
+\t\t\t\t\treturn pa < pb
+\t\t\t\tend)
+\t\t\t\tlog("I", logTag, "reordered career module batch before activation")
+\t\t\tend
+\t\t\treturn originalExtensionsLoad(arg, ...)
+\t\tend
+\tend
 
 \t-- freeroam_organizations may not be loaded yet at the moment CareerMP enters
 \t-- the protected career-start call, but loans will use it moments later while
@@ -155,6 +186,9 @@ end
 \tend
 \tif originalGetOrganizations and organizationsExt then
 \t\torganizationsExt.getOrganizations = originalGetOrganizations
+\tend
+\tif originalExtensionsLoad and type(extensions) == "table" then
+\t\textensions.load = originalExtensionsLoad
 \tend
 \tremoveProtection()
 
