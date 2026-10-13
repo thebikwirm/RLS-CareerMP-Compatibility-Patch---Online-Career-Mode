@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 from pathlib import Path
 
@@ -212,16 +213,50 @@ end
 \treturn unpack(results)
 end
 """
-    if old not in text:
-        if "protected call failed with traceback:" not in text:
-            raise RuntimeError("Unable to patch CareerMP protected-call traceback")
-    else:
+    if old in text:
         text = text.replace(old, new, 1)
+    elif "preloaded playerAttributes and installed temporary getter guard before career activation" in text:
+        # Already at the current canonical runtime-guard version.
+        pass
+    else:
+        # CareerMP.zip is commonly reused from the previous build. Earlier
+        # compatibility builds already contain the traceback version of
+        # withRemoteVehiclesProtected(), so the original block no longer
+        # matches. Upgrade the whole function to the current canonical body
+        # instead of treating any older patched version as complete.
+        canonical_start = new.index("local function withRemoteVehiclesProtected")
+        canonical_function = new[canonical_start:]
+        pattern = re.compile(
+            r"local function withRemoteVehiclesProtected\(fn, \.\.\.\)\n.*?\nend\n(?=\nlocal function |\nM\.|\nreturn M)",
+            re.DOTALL,
+        )
+        match = pattern.search(text)
+        if not match:
+            raise RuntimeError(
+                "Unable to upgrade CareerMP withRemoteVehiclesProtected(); source layout changed"
+            )
+        text = text[:match.start()] + canonical_function + text[match.end():]
+        print("  - upgraded existing careerPatches.lua runtime guard to current version")
+
+    # Build-time proof: never silently ship an older traceback-only patch.
+    required_runtime_markers = (
+        "preloaded playerAttributes and installed temporary getter guard before career activation",
+        "playerAttributes preload did not resolve before career activation",
+        "reordered career module batch before activation",
+        "delivery penalty requested before delivery modules were ready; using zero penalty",
+    )
+    missing = [marker for marker in required_runtime_markers if marker not in text]
+    if missing:
+        raise RuntimeError(
+            "CareerMP runtime-guard patch incomplete; missing markers: " + ", ".join(missing)
+        )
+
     entries[patches_path] = text.encode("utf-8")
 
     print("Patched CareerMP-0.39:")
     print("  - compat.lua preserves native multiple return values")
     print("  - careerPatches.lua logs full protected-call tracebacks")
+    print("  - careerPatches.lua current RLS runtime guards verified")
 
 
 def main() -> int:
