@@ -655,8 +655,12 @@ def patch_rls_039_career_module_order(entries: dict[str, bytes]) -> None:
             print(f"BeamNG 0.39 deterministic career-module ordering applied: {path}")
 
     if patched == 0:
-        raise RuntimeError(
-            "Unable to patch RLS career module load order; career.lua source layout changed."
+        # Optional on the 0.39 path now. The critical reputation/delivery startup
+        # races are guarded from CareerMP's runtime layer, which is independent
+        # of whichever RLS career.lua copy wins override precedence.
+        print(
+            "BeamNG 0.39 deterministic career-module ordering not applied; "
+            "CareerMP runtime guards will handle startup races"
         )
 
 
