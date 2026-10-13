@@ -443,6 +443,77 @@ end
             print(f"BeamNG 0.39 removed stale racingTeamRaceFlow dependency: {business_path}")
 
 
+def patch_rls_039_marker_quadtree_guard(entries: dict[str, bytes]) -> None:
+    """Skip RLS marker quadtree queries when there are no playmode clusters.
+
+    The RLS markerInteraction override can call queryNotNested() on BeamNG 0.39's
+    empty KD-tree representation (itemCount=0, tree=nil), which throws every
+    pre-render frame from kdtreebox2d.lua.
+    """
+
+    candidates = [
+        "lua/ge/extensions/overrides/gameplay/markerInteraction.lua",
+        "lua/ge/extensions/gameplay/markerInteraction.lua",
+    ]
+
+    marker = "RLSCareerMP39 empty playmode quadtree guard"
+    patched = 0
+
+    for path in candidates:
+        payload = entries.get(path)
+        if not payload:
+            continue
+
+        text = payload.decode("utf-8").replace("\r\n", "\n")
+        if marker in text:
+            patched += 1
+            print(f"BeamNG 0.39 marker quadtree guard already present: {path}")
+            continue
+
+        old = """    local clusterQt = gameplay_playmodeMarkers.getPlaymodeClustersAsQuadtree()
+
+    for id in clusterQt:queryNotNested(updateData.playerPosition.x-maxRadius, updateData.playerPosition.y-maxRadius, updateData.playerPosition.x+maxRadius, updateData.playerPosition.y + maxRadius) do
+      nearbyIds[id] = true
+    end
+
+    if updateData.isFreeCam then
+      for id in clusterQt:queryNotNested(updateData.camPos.x-maxRadius, updateData.camPos.y-maxRadius, updateData.camPos.x+maxRadius, updateData.camPos.y + maxRadius) do
+        nearbyIds[id] = true
+      end
+    end
+"""
+
+        new = """    -- RLSCareerMP39 empty playmode quadtree guard
+    local playmodeClusters = gameplay_playmodeMarkers.getPlaymodeClusters()
+    local clusterQt = gameplay_playmodeMarkers.getPlaymodeClustersAsQuadtree()
+
+    if clusterQt and playmodeClusters and next(playmodeClusters) then
+      for id in clusterQt:queryNotNested(updateData.playerPosition.x-maxRadius, updateData.playerPosition.y-maxRadius, updateData.playerPosition.x+maxRadius, updateData.playerPosition.y + maxRadius) do
+        nearbyIds[id] = true
+      end
+
+      if updateData.isFreeCam then
+        for id in clusterQt:queryNotNested(updateData.camPos.x-maxRadius, updateData.camPos.y-maxRadius, updateData.camPos.x+maxRadius, updateData.camPos.y + maxRadius) do
+          nearbyIds[id] = true
+        end
+      end
+    end
+"""
+
+        if old not in text:
+            continue
+
+        text = text.replace(old, new, 1)
+        entries[path] = text.encode("utf-8")
+        patched += 1
+        print(f"BeamNG 0.39 empty marker-quadtree guard applied: {path}")
+
+    if patched == 0:
+        raise RuntimeError(
+            "BeamNG 0.39 marker quadtree guard matched zero files; markerInteraction source layout changed."
+        )
+
+
 def patch_rls_039_final_runtime_guards(entries: dict[str, bytes]) -> None:
     """Final-pass guards for files sensitive to RLS override precedence."""
 
@@ -1195,6 +1266,7 @@ def patch_rls_entries(
     patch_rls_039_player_attributes(entries)
     patch_rls_039_runtime_api_guards(entries)
     patch_rls_039_batch_compat(entries)
+    patch_rls_039_marker_quadtree_guard(entries)
     patch_rls_039_final_runtime_guards(entries)
     patch_rls_039_career_module_order(entries)
     if apply_legacy_online_save_timing:
