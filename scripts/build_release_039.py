@@ -112,6 +112,13 @@ end
 \tlocal originalGetOrganizations = nil
 \tlocal originalExtensionsLoad = nil
 
+\t-- Preload playerAttributes before old RLS starts its bulk career-module load.
+\t-- In the old package loans can be initialized first and immediately query
+\t-- reputation, so waiting for the normal career batch is too late.
+\tif type(extensions) == "table" and type(extensions.load) == "function" then
+\t\tpcall(extensions.load, "career_modules_playerAttributes")
+\tend
+
 \t-- Old RLS career.lua passes the whole career module list to extensions.load()
 \t-- in filesystem enumeration order. Intercept that one batch during career
 \t-- activation and put playerAttributes/reputation/delivery support ahead of
@@ -153,6 +160,9 @@ end
 \tend
 
 \tlocal playerAttributesExt = type(extensions) == "table" and rawget(extensions, "career_modules_playerAttributes") or nil
+\tif playerAttributesExt and playerAttributesExt.getAttributeValue then
+\t\tlog("I", logTag, "preloaded playerAttributes and installed temporary getter guard before career activation")
+\tend
 
 \tif organizationsExt and organizationsExt.getOrganizations then
 \t\tlog("I", logTag, "installed temporary organizations guard before career activation")
