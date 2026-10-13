@@ -102,7 +102,24 @@ local function withRemoteVehiclesProtected(fn, ...)
 \treturn unpack(results)
 end
 """
-    new = """local function withRemoteVehiclesProtected(fn, ...)
+    new = """local function installRLS039RuntimeGuards()
+\tlocal deliveryExt = type(extensions) == "table" and extensions["career_modules_delivery_general"] or career_modules_delivery_general
+\tif deliveryExt and deliveryExt.getDeliveryModePenalty then
+\t\tif not deliveryExt.__careerMP39PenaltyGuard then
+\t\t\tlocal originalPenalty = deliveryExt.getDeliveryModePenalty
+\t\t\tdeliveryExt.getDeliveryModePenalty = function(...)
+\t\t\t\tlocal ok, value = pcall(originalPenalty, ...)
+\t\t\t\tif ok then return value end
+\t\t\t\tlog("W", logTag, "delivery penalty requested before delivery modules were ready; using zero penalty")
+\t\t\t\treturn {money = 0}
+\t\t\tend
+\t\t\tdeliveryExt.__careerMP39PenaltyGuard = true
+\t\t\tlog("I", logTag, "installed RLS 0.39 delivery penalty runtime guard")
+\t\tend
+\tend
+end
+
+local function withRemoteVehiclesProtected(fn, ...)
 \tinstallProtection()
 
 \t-- RLS 2.6.x can query organization reputation while BeamNG is still
@@ -213,19 +230,23 @@ end
 \treturn unpack(results)
 end
 """
+    current_markers = (
+        "preloaded playerAttributes and installed temporary getter guard before career activation",
+        "playerAttributes preload did not resolve before career activation",
+        "reordered career module batch before activation",
+        "delivery penalty requested before delivery modules were ready; using zero penalty",
+    )
+
     if old in text:
         text = text.replace(old, new, 1)
-    elif "preloaded playerAttributes and installed temporary getter guard before career activation" in text:
+    elif all(marker in text for marker in current_markers):
         # Already at the current canonical runtime-guard version.
         pass
     else:
         # CareerMP.zip is commonly reused from the previous build. Earlier
-        # compatibility builds already contain the traceback version of
-        # withRemoteVehiclesProtected(), so the original block no longer
-        # matches. Upgrade the whole function to the current canonical body
-        # instead of treating any older patched version as complete.
-        canonical_start = new.index("local function withRemoteVehiclesProtected")
-        canonical_function = new[canonical_start:]
+        # compatibility builds can contain only part of the runtime-guard
+        # section. Replace the protected-call function and inject the complete
+        # canonical section, including the delivery helper.
         pattern = re.compile(
             r"local function withRemoteVehiclesProtected\(fn, \.\.\.\)\n.*?\nend\n(?=\nlocal function |\nM\.|\nreturn M)",
             re.DOTALL,
@@ -235,16 +256,23 @@ end
             raise RuntimeError(
                 "Unable to upgrade CareerMP withRemoteVehiclesProtected(); source layout changed"
             )
-        text = text[:match.start()] + canonical_function + text[match.end():]
-        print("  - upgraded existing careerPatches.lua runtime guard to current version")
+
+        # Remove an older delivery helper if it exists so we do not duplicate it.
+        helper_start = text.rfind("local function installRLS039RuntimeGuards()", 0, match.start())
+        if helper_start != -1:
+            between = text[helper_start:match.start()]
+            if "local function withRemoteVehiclesProtected" not in between:
+                replace_start = helper_start
+            else:
+                replace_start = match.start()
+        else:
+            replace_start = match.start()
+
+        text = text[:replace_start] + new + text[match.end():]
+        print("  - upgraded existing careerPatches.lua runtime guard section to current version")
 
     # Build-time proof: never silently ship an older traceback-only patch.
-    required_runtime_markers = (
-        "preloaded playerAttributes and installed temporary getter guard before career activation",
-        "playerAttributes preload did not resolve before career activation",
-        "reordered career module batch before activation",
-        "delivery penalty requested before delivery modules were ready; using zero penalty",
-    )
+    required_runtime_markers = current_markers
     missing = [marker for marker in required_runtime_markers if marker not in text]
     if missing:
         raise RuntimeError(
