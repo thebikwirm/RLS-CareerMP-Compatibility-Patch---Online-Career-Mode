@@ -74,16 +74,17 @@ end
 
     text = payload.decode("utf-8").replace("\r\n", "\n")
     old = """local function installRLS039RuntimeGuards()
-\tif career_modules_delivery_general and career_modules_delivery_general.getDeliveryModePenalty then
-\t\tif not career_modules_delivery_general.__careerMP39PenaltyGuard then
-\t\t\tlocal originalPenalty = career_modules_delivery_general.getDeliveryModePenalty
-\t\t\tcareer_modules_delivery_general.getDeliveryModePenalty = function(...)
+\tlocal deliveryExt = type(extensions) == "table" and rawget(extensions, "career_modules_delivery_general") or career_modules_delivery_general
+\tif deliveryExt and deliveryExt.getDeliveryModePenalty then
+\t\tif not deliveryExt.__careerMP39PenaltyGuard then
+\t\t\tlocal originalPenalty = deliveryExt.getDeliveryModePenalty
+\t\t\tdeliveryExt.getDeliveryModePenalty = function(...)
 \t\t\t\tlocal ok, value = pcall(originalPenalty, ...)
 \t\t\t\tif ok then return value end
 \t\t\t\tlog("W", logTag, "delivery penalty requested before delivery modules were ready; using zero penalty")
 \t\t\t\treturn {money = 0}
 \t\t\tend
-\t\t\tcareer_modules_delivery_general.__careerMP39PenaltyGuard = true
+\t\t\tdeliveryExt.__careerMP39PenaltyGuard = true
 \t\tend
 \tend
 end
@@ -109,10 +110,12 @@ end
 \t-- so install a temporary organization-layer guard as well.
 \tlocal originalGetAttributeValue = nil
 \tlocal originalGetOrganizations = nil
+\tlocal organizationsExt = type(extensions) == "table" and rawget(extensions, "freeroam_organizations") or freeroam_organizations
+\tlocal playerAttributesExt = type(extensions) == "table" and rawget(extensions, "career_modules_playerAttributes") or career_modules_playerAttributes
 
-\tif freeroam_organizations and freeroam_organizations.getOrganizations then
-\t\toriginalGetOrganizations = freeroam_organizations.getOrganizations
-\t\tfreeroam_organizations.getOrganizations = function(...)
+\tif organizationsExt and organizationsExt.getOrganizations then
+\t\toriginalGetOrganizations = organizationsExt.getOrganizations
+\t\torganizationsExt.getOrganizations = function(...)
 \t\t\tlocal ok, value = pcall(originalGetOrganizations, ...)
 \t\t\tif ok then return value end
 \t\t\tlog("W", logTag, "organizations requested before playerAttributes was ready; returning empty organization list for this activation step")
@@ -120,9 +123,9 @@ end
 \t\tend
 \tend
 
-\tif career_modules_playerAttributes and career_modules_playerAttributes.getAttributeValue then
-\t\toriginalGetAttributeValue = career_modules_playerAttributes.getAttributeValue
-\t\tcareer_modules_playerAttributes.getAttributeValue = function(attributeName)
+\tif playerAttributesExt and playerAttributesExt.getAttributeValue then
+\t\toriginalGetAttributeValue = playerAttributesExt.getAttributeValue
+\t\tplayerAttributesExt.getAttributeValue = function(attributeName)
 \t\t\tlocal ok, value = pcall(originalGetAttributeValue, attributeName)
 \t\t\tif ok then return value end
 \t\t\tlog("W", logTag, "playerAttributes not ready during career activation for " .. tostring(attributeName) .. "; using 0")
@@ -136,11 +139,11 @@ end
 \tend
 \tlocal results = {xpcall(invoke, debug.traceback)}
 
-\tif originalGetAttributeValue and career_modules_playerAttributes then
-\t\tcareer_modules_playerAttributes.getAttributeValue = originalGetAttributeValue
+\tif originalGetAttributeValue and playerAttributesExt then
+\t\tplayerAttributesExt.getAttributeValue = originalGetAttributeValue
 \tend
-\tif originalGetOrganizations and freeroam_organizations then
-\t\tfreeroam_organizations.getOrganizations = originalGetOrganizations
+\tif originalGetOrganizations and organizationsExt then
+\t\torganizationsExt.getOrganizations = originalGetOrganizations
 \tend
 \tremoveProtection()
 
