@@ -1192,7 +1192,7 @@ local function processPendingCareerStart(dtReal)
 	careerStartInProgress = false
 
 	if not ok then
-		log("E", logTag, "career activation attempt threw:\n" .. tostring(resultOrErr))
+		log("E", logTag, "career activation attempt threw:\\n" .. tostring(resultOrErr))
 		return
 	end
 
@@ -1263,6 +1263,17 @@ end
         if activation_marker not in enabler_text:
             raise RuntimeError(
                 "CareerMP queued career activation retry v5 marker missing after patch"
+            )
+
+        # Guard against accidentally emitting a literal newline inside the Lua
+        # quoted traceback message (which makes careerMPEnabler.lua unloadable).
+        if 'career activation attempt threw:\n"' in enabler_text:
+            raise RuntimeError(
+                "Generated careerMPEnabler.lua contains broken multiline Lua string"
+            )
+        if 'career activation attempt threw:\\n" .. tostring(resultOrErr)' not in enabler_text:
+            raise RuntimeError(
+                "CareerMP V5 traceback log string verification failed"
             )
 
         entries[enabler_path] = enabler_text.encode("utf-8")
