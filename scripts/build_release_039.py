@@ -953,6 +953,16 @@ def main() -> int:
     parser.add_argument("--rls-original", required=True, type=Path)
     parser.add_argument("--careermp-039", required=True, type=Path)
     parser.add_argument(
+        "--beammp-original",
+        type=Path,
+        default=None,
+        help=(
+            "Optional BeamMP.zip to patch for BeamNG 0.39 Vue-router compatibility. "
+            "When supplied, a patched BeamMP.zip is built and installed alongside "
+            "CareerMP/RLS."
+        ),
+    )
+    parser.add_argument(
         "--out-dir",
         type=Path,
         default=repo_root / "built-039",
@@ -963,8 +973,9 @@ def main() -> int:
         type=Path,
         default=None,
         help=(
-            "Optional BeamMP server root. When supplied, the finished CareerMP.zip "
-            "and RLS compatibility zip are copied to Resources/Client automatically."
+            "Optional BeamMP server root. When supplied, the finished CareerMP.zip, "
+            "RLS compatibility zip, and optional patched BeamMP.zip are copied to "
+            "Resources/Client automatically."
         ),
     )
     parser.add_argument(
@@ -980,6 +991,11 @@ def main() -> int:
 
     rls_original = args.rls_original.expanduser().resolve()
     careermp_original = args.careermp_039.expanduser().resolve()
+    beammp_original = (
+        args.beammp_original.expanduser().resolve()
+        if args.beammp_original
+        else None
+    )
     out_dir = args.out_dir.expanduser().resolve()
     server_root = args.server_root.expanduser().resolve() if args.server_root else None
 
@@ -987,6 +1003,8 @@ def main() -> int:
         raise SystemExit(f"RLS original zip not found: {rls_original}")
     if not careermp_original.is_file():
         raise SystemExit(f"CareerMP 0.39 zip not found: {careermp_original}")
+    if beammp_original and not beammp_original.is_file():
+        raise SystemExit(f"BeamMP zip not found: {beammp_original}")
 
     validate_careermp_039(careermp_original)
 
@@ -995,6 +1013,7 @@ def main() -> int:
     rls_patch_dir = repo_root / "patches" / "RLS"
     rls_out = out_dir / f"{rls_original.stem}_careermp039_compatible.zip"
     careermp_out = out_dir / "CareerMP.zip"
+    beammp_out = out_dir / "BeamMP.zip" if beammp_original else None
 
     rls_size, rls_hash = build_mod(
         rls_original,
