@@ -970,6 +970,92 @@ end
                 "CareerMP direct profile-start fallback v3 marker missing after patch"
             )
 
+        # V4: BeamMP 0.39 reliably calls MPCoreNetwork.loadLevel with the server
+        # map path even when CareerMP never receives worldReadyState=2 or
+        # onClientPostStartMission. Observe that call and request the real server
+        # config after the map has had time to settle. This keeps profile naming
+        # authoritative (serverSaveName/serverSaveSuffix) and returns to the
+        # normal rxCareerSync start path instead of guessing locally.
+        loadlevel_marker = "CareerMP 0.39 BeamMP loadLevel sync fallback v4"
+        if loadlevel_marker not in enabler_text:
+            state_anchor_v4 = """local directStartAttempted = false
+"""
+            state_replacement_v4 = """local directStartAttempted = false
+
+-- CareerMP 0.39 BeamMP loadLevel sync fallback v4
+local beamMPLevelLoadSeen = false
+local beamMPLevelLoadPath = nil
+local beamMPLevelLoadElapsed = 0
+local beamMPLevelLoadSyncDelay = 10
+local beamMPLevelLoadWrapped = false
+"""
+            if state_anchor_v4 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install BeamMP loadLevel fallback state; "
+                    "direct-start state layout changed"
+                )
+            enabler_text = enabler_text.replace(
+                state_anchor_v4, state_replacement_v4, 1
+            )
+
+            update_anchor_v4 = """local function onUpdate(dtReal, dtSim, dtRaw)
+	tryDirectCareerStart(dtReal)
+"""
+            update_replacement_v4 = """local function onUpdate(dtReal, dtSim, dtRaw)
+	-- BeamMP's own map-load call is the most reliable 0.39 join milestone.
+	if not beamMPLevelLoadWrapped and MPCoreNetwork and type(MPCoreNetwork.loadLevel) == "function" then
+		local originalLoadLevel = MPCoreNetwork.loadLevel
+		MPCoreNetwork.loadLevel = function(levelPath, ...)
+			beamMPLevelLoadSeen = true
+			beamMPLevelLoadPath = tostring(levelPath or "")
+			beamMPLevelLoadElapsed = 0
+			log("I", logTag, "CareerMP observed BeamMP loadLevel: " .. beamMPLevelLoadPath)
+			return originalLoadLevel(levelPath, ...)
+		end
+		beamMPLevelLoadWrapped = true
+		log("I", logTag, "CareerMP installed BeamMP loadLevel sync fallback")
+	end
+
+	if beamMPLevelLoadSeen and not syncRequested then
+		beamMPLevelLoadElapsed = beamMPLevelLoadElapsed + (dtReal or 0)
+		if beamMPLevelLoadElapsed >= beamMPLevelLoadSyncDelay then
+			if requestCareerSync("BeamMP loadLevel fallback after " .. tostring(beamMPLevelLoadSyncDelay) .. "s") then
+				log("W", logTag, "CareerMP sync requested from BeamMP loadLevel fallback for " .. tostring(beamMPLevelLoadPath))
+			end
+		end
+	end
+
+	tryDirectCareerStart(dtReal)
+"""
+            if update_anchor_v4 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install BeamMP loadLevel fallback; onUpdate layout changed"
+                )
+            enabler_text = enabler_text.replace(
+                update_anchor_v4, update_replacement_v4, 1
+            )
+
+            leave_anchor_v4 = """	directStartAttempted = false
+end
+"""
+            leave_replacement_v4 = """	directStartAttempted = false
+	beamMPLevelLoadSeen = false
+	beamMPLevelLoadPath = nil
+	beamMPLevelLoadElapsed = 0
+end
+"""
+            if leave_anchor_v4 in enabler_text:
+                enabler_text = enabler_text.replace(
+                    leave_anchor_v4, leave_replacement_v4, 1
+                )
+
+            print("  - CareerMP 0.39 BeamMP loadLevel sync fallback v4 installed")
+
+        if loadlevel_marker not in enabler_text:
+            raise RuntimeError(
+                "CareerMP BeamMP loadLevel sync fallback v4 marker missing after patch"
+            )
+
         entries[enabler_path] = enabler_text.encode("utf-8")
         if "CareerMP watchdog world-ready checkpoint" not in enabler_text:
             world_ready_pattern = re.compile(
@@ -995,6 +1081,7 @@ end
     print("  - careerPatches.lua installs RLS guards continuously/idempotently")
     print("  - careerMPEnabler.lua has MP-only stable-level sync fallback (15s)")
     print("  - careerMPEnabler.lua can direct-start a stable selected profile after 5s")
+    print("  - careerMPEnabler.lua observes BeamMP loadLevel and requests sync after 10s")
 
 
 def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
