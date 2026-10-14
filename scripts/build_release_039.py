@@ -9,6 +9,7 @@ from build_release import (
     RLS_REMOVE_PREFIXES,
     build_mod,
     read_careermp_entries,
+    read_zip_entries,
     sha256sum,
 )
 from zip_utils import add_zip_engine_argument, describe_zip_engine, write_zip
@@ -852,6 +853,95 @@ end
     print("  - careerPatches.lua current RLS runtime guards verified")
     print("  - careerPatches.lua installs RLS guards continuously/idempotently")
     print("  - careerMPEnabler.lua has MP-only stable-level sync fallback (15s)")
+
+
+def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
+    """Patch BeamMP's Vue navigation for BeamNG 0.39's stricter UI router."""
+
+    index_path = "ui/ui-vue/mods/BeamMP/index.js"
+    index_payload = entries.get(index_path)
+    if not index_payload:
+        raise RuntimeError(
+            f"BeamMP input missing {index_path}; unsupported BeamMP UI layout"
+        )
+
+    index_text = index_payload.decode("utf-8").replace("\r\n", "\n")
+    route_marker = "BeamNG 0.39 direct child-route handoff"
+    if route_marker not in index_text:
+        old_action = "    action: BEAMMP_ROUTE_NAME,\n"
+        new_action = (
+            "    // BeamNG 0.39 direct child-route handoff: avoid asking the Lua "
+            "router to hand off to a redirecting parent route.\n"
+            "    action: BEAMMP_LAUNCHER_ROUTE_NAME,\n"
+        )
+        if old_action not in index_text:
+            if "action: BEAMMP_LAUNCHER_ROUTE_NAME" not in index_text:
+                raise RuntimeError(
+                    "Unable to patch BeamMP main-menu route target; index.js layout changed"
+                )
+        else:
+            index_text = index_text.replace(old_action, new_action, 1)
+    entries[index_path] = index_text.encode("utf-8")
+
+    packaged_logo = "/ui/ui-vue/mods/BeamMP/icons/account-multiple.svg"
+    logo_candidates = (
+        "ui/ui-vue/mods/BeamMP/layouts/BeamMPMain.vue",
+        "ui/ui-vue/mods/BeamMP/views/BeamMPLoginView.vue",
+    )
+    patched_logo_files: list[str] = []
+    for ui_path in logo_candidates:
+        payload = entries.get(ui_path)
+        if not payload:
+            continue
+        text = payload.decode("utf-8").replace("\r\n", "\n")
+        original = text
+        text = text.replace(
+            "/ui/assets/BeamMP/beammp_new_cropped.png",
+            packaged_logo,
+        )
+        text = text.replace(
+            "ui/assets/BeamMP/beammp_new_cropped.png",
+            packaged_logo,
+        )
+        text = text.replace(
+            "/ui/assets/BeamMP/icons/account-multiple.svg",
+            packaged_logo,
+        )
+        if text != original:
+            entries[ui_path] = text.encode("utf-8")
+            patched_logo_files.append(ui_path)
+
+    verify_index = entries[index_path].decode("utf-8", errors="replace")
+    if "action: BEAMMP_LAUNCHER_ROUTE_NAME" not in verify_index:
+        raise RuntimeError("BeamMP UI route patch verification failed")
+
+    legacy_logo = "ui/assets/BeamMP/beammp_new_cropped.png"
+    remaining = []
+    for name, payload in entries.items():
+        if not name.lower().endswith((".js", ".vue", ".html", ".css")):
+            continue
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if legacy_logo in text:
+            remaining.append(name)
+
+    if remaining:
+        raise RuntimeError(
+            "BeamMP legacy logo path remains after 0.39 UI patch: "
+            + ", ".join(sorted(remaining))
+        )
+
+    print("Patched BeamMP for BeamNG 0.39 UI:")
+    print("  - main-menu action targets concrete menu.beammp.launcher child route")
+    print("  - redirecting menu.beammp parent is no longer the initial Lua handoff target")
+    if patched_logo_files:
+        print("  - legacy BeamMP logo URL replaced with packaged Vue-mod icon:")
+        for ui_path in patched_logo_files:
+            print(f"    {ui_path}")
+    else:
+        print("  - BeamMP legacy logo URL already absent/patched")
 
 
 def main() -> int:
