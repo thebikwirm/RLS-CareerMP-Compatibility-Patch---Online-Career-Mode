@@ -858,6 +858,19 @@ end
 def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
     """Patch BeamMP's Vue navigation for BeamNG 0.39's stricter UI router."""
 
+    required_beammp_paths = (
+        "scripts/BeamMP/modScript.lua",
+        "ui/ui-vue/mods/BeamMP/index.js",
+    )
+    missing_beammp_paths = [
+        name for name in required_beammp_paths if name not in entries
+    ]
+    if missing_beammp_paths:
+        raise RuntimeError(
+            "BeamMP input is not a complete client package; missing: "
+            + ", ".join(missing_beammp_paths)
+        )
+
     index_path = "ui/ui-vue/mods/BeamMP/index.js"
     index_payload = entries.get(index_path)
     if not index_payload:
@@ -1137,6 +1150,14 @@ def main() -> int:
     if server_root:
         resources_client = server_root / "Resources" / "Client"
         resources_client.mkdir(parents=True, exist_ok=True)
+
+        # BeamMP itself is launcher/client infrastructure, not a server resource.
+        # Remove stale copies created by older compatibility builds because a
+        # second server-delivered BeamMP.zip causes duplicate UI/mod activation.
+        stale_server_beammp = resources_client / "BeamMP.zip"
+        if stale_server_beammp.is_file():
+            stale_server_beammp.unlink()
+            print(f"Removed stale server BeamMP resource: {stale_server_beammp}")
 
         installed = []
 
