@@ -1267,11 +1267,13 @@ end
 
         # Guard against accidentally emitting a literal newline inside the Lua
         # quoted traceback message (which makes careerMPEnabler.lua unloadable).
-        if 'career activation attempt threw:\n"' in enabler_text:
+        broken_traceback = 'career activation attempt threw:' + "\n" + '"'
+        expected_traceback = 'career activation attempt threw:\\n" .. tostring(resultOrErr)'
+        if broken_traceback in enabler_text:
             raise RuntimeError(
                 "Generated careerMPEnabler.lua contains broken multiline Lua string"
             )
-        if 'career activation attempt threw:\\n" .. tostring(resultOrErr)' not in enabler_text:
+        if expected_traceback not in enabler_text:
             raise RuntimeError(
                 "CareerMP V5 traceback log string verification failed"
             )
