@@ -32,6 +32,218 @@ def validate_careermp_039(careermp_zip: Path) -> None:
         )
 
 
+def install_careermp_watchdog(entries: dict[str, bytes]) -> None:
+    """Add a lightweight CareerMP feature watchdog and resilient loader."""
+
+    watchdog_path = "lua/ge/extensions/careerMP/watchdog.lua"
+    watchdog = r'''local M = {}
+
+local logTag = "careerMP.watchdog"
+local features = {}
+local retryDelay = 5
+local elapsed = 0
+local summaryPrinted = false
+
+local function nowState(name)
+  features[name] = features[name] or {
+    name = name,
+    attempts = 0,
+    state = "pending",
+    lastError = nil,
+    path = name
+  }
+  return features[name]
+end
+
+local function extensionName(path)
+  return (path or ""):gsub("[^%w_]", "_")
+end
+
+local function isLoaded(path)
+  if type(extensions) ~= "table" then return false end
+  return extensions[extensionName(path)] ~= nil
+end
+
+local function doLoad(path)
+  local state = nowState(path)
+  state.attempts = state.attempts + 1
+
+  local ok, err = xpcall(function()
+    load(path)
+    setExtensionUnloadMode(path, "manual")
+  end, debug.traceback)
+
+  if ok and isLoaded(path) then
+    state.state = state.attempts > 1 and "recovered" or "loaded"
+    state.lastError = nil
+    log("I", logTag, string.format("%s: %s on attempt %d", state.state, path, state.attempts))
+    return true
+  end
+
+  state.state = state.attempts > 1 and "failed-final" or "failed-retry-pending"
+  state.lastError = tostring(err or "extension not present after load()")
+  log("E", logTag, string.format(
+    "%s: %s attempt %d failed: %s",
+    state.state, path, state.attempts, state.lastError
+  ))
+  return false
+end
+
+function M.loadPersistent(path)
+  return doLoad(path)
+end
+
+function M.recordFailure(name, err)
+  local state = nowState(name)
+  state.state = "runtime-failed"
+  state.lastError = tostring(err)
+  log("E", logTag, "runtime failure: " .. tostring(name) .. ": " .. tostring(err))
+end
+
+function M.recordSuccess(name)
+  local state = nowState(name)
+  if state.state ~= "recovered" then
+    state.state = "loaded"
+  end
+  state.lastError = nil
+end
+
+local function retryPending()
+  for path, state in pairs(features) do
+    if state.state == "failed-retry-pending" and state.attempts < 2 then
+      log("W", logTag, "retrying failed CareerMP feature once: " .. tostring(path))
+      doLoad(path)
+    end
+  end
+end
+
+local function stateCounts()
+  local counts = {
+    loaded = 0,
+    recovered = 0,
+    pending = 0,
+    failed = 0,
+    runtimeFailed = 0
+  }
+  for _, state in pairs(features) do
+    if state.state == "loaded" then
+      counts.loaded = counts.loaded + 1
+    elseif state.state == "recovered" then
+      counts.recovered = counts.recovered + 1
+    elseif state.state == "failed-retry-pending" or state.state == "pending" then
+      counts.pending = counts.pending + 1
+    elseif state.state == "runtime-failed" then
+      counts.runtimeFailed = counts.runtimeFailed + 1
+    else
+      counts.failed = counts.failed + 1
+    end
+  end
+  return counts
+end
+
+function M.dumpSummary()
+  local counts = stateCounts()
+  log("I", logTag, "========== CareerMP feature health ==========")
+  log("I", logTag, string.format(
+    "loaded=%d recovered=%d pending=%d failed=%d runtimeFailed=%d",
+    counts.loaded, counts.recovered, counts.pending, counts.failed, counts.runtimeFailed
+  ))
+
+  local names = {}
+  for name in pairs(features) do table.insert(names, name) end
+  table.sort(names)
+
+  for _, name in ipairs(names) do
+    local state = features[name]
+    local line = string.format("[%s] %s (attempts=%d)", state.state, name, state.attempts)
+    if state.lastError then
+      line = line .. " :: " .. state.lastError:gsub("[\r\n]+", " | ")
+    end
+    log(state.state == "loaded" or state.state == "recovered" and "I" or "W", logTag, line)
+  end
+  log("I", logTag, "============================================")
+  summaryPrinted = true
+  return features
+end
+
+function M.getFeatureHealth()
+  return features
+end
+
+function M.onUpdate(dtReal)
+  elapsed = elapsed + (dtReal or 0)
+
+  if elapsed >= retryDelay then
+    retryPending()
+  end
+
+  if elapsed >= retryDelay + 2 and not summaryPrinted then
+    M.dumpSummary()
+  end
+end
+
+function M.onCareerActive(active)
+  if active then
+    retryPending()
+    M.dumpSummary()
+  end
+end
+
+function M.onExtensionLoaded()
+  log("I", logTag, "CareerMP watchdog active; failed feature loads will continue and retry once")
+end
+
+return M
+'''
+    entries[watchdog_path] = watchdog.encode("utf-8")
+
+    modscript_path = "scripts/CareerMP/modScript.lua"
+    payload = entries.get(modscript_path)
+    if not payload:
+        raise RuntimeError(f"CareerMP input missing {modscript_path}")
+
+    text = payload.decode("utf-8").replace("\r\n", "\n")
+    if "CareerMP watchdog bootstrap" not in text:
+        old = '''local function loadPersistent(path)
+\tload(path)
+\tsetExtensionUnloadMode(path, 'manual')
+end
+'''
+        new = '''-- CareerMP watchdog bootstrap
+load('careerMP/watchdog')
+setExtensionUnloadMode('careerMP/watchdog', 'manual')
+
+local function loadPersistent(path)
+\tlocal watchdog = extensions and extensions["careerMP_watchdog"]
+\tif watchdog and watchdog.loadPersistent then
+\t\treturn watchdog.loadPersistent(path)
+\tend
+
+\t-- Fallback only if the watchdog itself could not be resolved.
+\tlocal ok, err = xpcall(function()
+\t\tload(path)
+\t\tsetExtensionUnloadMode(path, 'manual')
+\tend, debug.traceback)
+\tif not ok then
+\t\tlog("E", "careerMP.modScript", "feature load failed but startup will continue: " .. tostring(path) .. ": " .. tostring(err))
+\tend
+\treturn ok
+end
+'''
+        if old not in text:
+            raise RuntimeError(
+                "Unable to install CareerMP watchdog loader; modScript.lua source layout changed"
+            )
+        text = text.replace(old, new, 1)
+
+    entries[modscript_path] = text.encode("utf-8")
+    print("CareerMP feature watchdog installed:")
+    print("  - protected feature loading")
+    print("  - continue after failed feature")
+    print("  - one delayed retry per failed feature")
+    print("  - compact feature health summary")
+
+
 def patch_careermp_039(entries: dict[str, bytes]) -> None:
     """Apply narrow fixes required by BeamNG 0.39.4/RLS integration."""
 
@@ -353,6 +565,7 @@ def main() -> int:
     # required by the RLS integration.
     careermp_entries = read_careermp_entries(careermp_original)
     patch_careermp_039(careermp_entries)
+    install_careermp_watchdog(careermp_entries)
     write_zip(careermp_out, careermp_entries, engine=args.zip_engine)
     cmp_size = careermp_out.stat().st_size
     cmp_hash = sha256sum(careermp_out)
