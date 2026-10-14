@@ -7,6 +7,8 @@ local commandCallback = nil
 local devKey = "dc124d6fb1a6261f"
 
 local careerMP39RuntimeStarted = false
+local careerMP39ReadySince = nil
+local careerMP39SettleDelay = 3.5
 local careerMP39Build = true
 
 local function isCareerMP39()
@@ -147,6 +149,19 @@ local function startCareerMP39RuntimeIfReady()
     end
 
     if not careerMP39ProfileReady() then
+        careerMP39ReadySince = nil
+        return false
+    end
+
+    if not careerMP39ReadySince then
+        careerMP39ReadySince = os.clockhp()
+        log("I", "RLSCareerMP39",
+            "career/profile ready; allowing UI/game-state to settle for " ..
+            tostring(careerMP39SettleDelay) .. "s before RLS startup")
+        return false
+    end
+
+    if (os.clockhp() - careerMP39ReadySince) < careerMP39SettleDelay then
         return false
     end
 
@@ -157,7 +172,6 @@ local function startCareerMP39RuntimeIfReady()
     -- layers deterministic and prevents BeamNG's resolver from repeatedly
     -- unloading higher-level modules while their foundations are still absent.
     loadExtensionIfNeeded("overhaul_orderedLoader")
-    loadExtensionIfNeeded("overhaul_mapRouter")
 
     local orderedLoader =
         type(extensions) == "table" and rawget(extensions, "overhaul_orderedLoader") or nil
@@ -239,6 +253,15 @@ end
 
 local function unloadAllExtensions()
     removePhoneBinding()
+
+    if isCareerMP39() then
+        local orderedLoader =
+            type(extensions) == "table" and rawget(extensions, "overhaul_orderedLoader") or nil
+        if orderedLoader and type(orderedLoader.stop) == "function" then
+            pcall(orderedLoader.stop, "extension manager unload")
+        end
+        careerMP39ReadySince = nil
+    end
     extensions.unload("core_gameContext")
     extensions.unload("gameplay_events_freeroamEvents")
     if not isCareerMP39() then
@@ -276,6 +299,16 @@ local function startup()
     -- Load the 0.39 save/profile bridge before RLS career modules initialise.
     setExtensionUnloadMode("overhaul_careermp39Compat", "manual")
     extensions.load("overhaul_careermp39Compat")
+
+    if isCareerMP39() then
+        -- Map/settings services are profile-independent. Keep them alive before
+        -- career activation so switchMap and POI discovery never race overhaul_maps.
+        loadExtensionIfNeeded("overhaul_settings")
+        loadExtensionIfNeeded("overhaul_maps")
+        loadExtensionIfNeeded("overhaul_clearLevels")
+        loadExtensionIfNeeded("overhaul_addMapChanges")
+        loadExtensionIfNeeded("overhaul_mapRouter")
+    end
 
     -- Pin BeamNG 0.39's native career dependency chain immediately. BeamMP keeps
     -- activating/mounting resource mods after RLS itself activates, and each file
@@ -354,6 +387,7 @@ local function onModDeactivated(modData)
        (ourModId and modData.modData and modData.modData.tagid == ourModId) then
         unloadAllExtensions()
         careerMP39RuntimeStarted = false
+        careerMP39ReadySince = nil
         if not isCareerMP39() then
             loadManualUnloadExtensions()
         end
@@ -476,9 +510,33 @@ end
 M.onCheatsModeChanged = function(enabled)
     updateEditorBlocking()
 end
+
+local function stopCareerMP39Runtime(reason)
+    if not isCareerMP39() then return end
+
+    local orderedLoader =
+        type(extensions) == "table" and rawget(extensions, "overhaul_orderedLoader") or nil
+    if orderedLoader and type(orderedLoader.stop) == "function" then
+        pcall(orderedLoader.stop, reason)
+    end
+
+    careerMP39RuntimeStarted = false
+    careerMP39ReadySince = nil
+end
+
+local function onCareerActive(active)
+    if active then return end
+    stopCareerMP39Runtime("career deactivated")
+end
+
+local function onClientEndMission()
+    stopCareerMP39Runtime("client mission ending")
+end
   
 M.onVehicleSpawned = onVehicleSpawned
 M.onUpdate = onUpdate
+M.onCareerActive = onCareerActive
+M.onClientEndMission = onClientEndMission
 M.onExtensionLoaded = startup
 M.onModActivated = onModActivated
 M.onModDeactivated = onModDeactivated
