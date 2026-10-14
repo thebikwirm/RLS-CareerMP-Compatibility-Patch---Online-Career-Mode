@@ -21,6 +21,7 @@ if exist "%BUILDROOT%\CareerMP.zip" set "CAREERMP=%BUILDROOT%\CareerMP.zip"
 
 set "BEAMMP="
 if exist "%BUILDROOT%\BeamMP.zip" set "BEAMMP=%BUILDROOT%\BeamMP.zip"
+if not defined BEAMMP if exist "%SERVER%\Resources\Client\BeamMP.zip" set "BEAMMP=%SERVER%\Resources\Client\BeamMP.zip"
 if defined RLS (
   echo RLS:      %RLS%
 ) else (
@@ -39,7 +40,7 @@ if defined BEAMMP (
   echo BeamMP:   %BEAMMP%
 ) else (
   set "BEAMMP=%BUILDROOT%\BeamMP.zip"
-  echo BeamMP:   [missing - rebuild skipped]
+  echo BeamMP:   [missing in build folder and server - rebuild skipped]
 )
 
 echo.
