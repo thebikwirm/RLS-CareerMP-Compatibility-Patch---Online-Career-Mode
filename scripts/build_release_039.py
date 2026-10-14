@@ -552,6 +552,45 @@ end
             "CareerMP runtime-guard patch incomplete; missing markers: " + ", ".join(missing)
         )
 
+    # Ensure RLS runtime guards are installed even when BeamNG/RLS activates
+    # career modules through a path that bypasses CareerMP's explicit
+    # createOrLoadCareerAndStart wrapper.
+    always_guard_marker = "CareerMP39 always-on RLS runtime guard tick"
+    if always_guard_marker not in text:
+        old_update = """local function onUpdate()
+\tif not applied then M.apply() end
+\t-- Safety net: onCareerActive is deferred on the level-change path, and on a failed
+\t-- activation it may never arrive at all.
+\tif protection and (os.clockhp() - protection.installedAt) > PROTECTION_MAX_SECONDS then
+\t\tlog("W", logTag, "vehicle protection timed out - releasing")
+\t\tremoveProtection()
+\tend
+end
+"""
+        new_update = """local function onUpdate()
+\t-- CareerMP39 always-on RLS runtime guard tick
+\tinstallRLS039RuntimeGuards()
+
+\tif not applied then M.apply() end
+\t-- Safety net: onCareerActive is deferred on the level-change path, and on a failed
+\t-- activation it may never arrive at all.
+\tif protection and (os.clockhp() - protection.installedAt) > PROTECTION_MAX_SECONDS then
+\t\tlog("W", logTag, "vehicle protection timed out - releasing")
+\t\tremoveProtection()
+\tend
+end
+"""
+        if old_update not in text:
+            raise RuntimeError(
+                "Unable to install always-on RLS runtime guard tick; "
+                "careerPatches.lua onUpdate layout changed"
+            )
+        text = text.replace(old_update, new_update, 1)
+        print("  - careerPatches.lua always-on RLS runtime guard tick installed")
+
+    if always_guard_marker not in text:
+        raise RuntimeError("CareerMP always-on RLS runtime guard marker missing after patch")
+
     entries[patches_path] = text.encode("utf-8")
 
     enabler_path = "lua/ge/extensions/careerMPEnabler.lua"
@@ -811,6 +850,7 @@ end
     print("  - compat.lua preserves native multiple return values")
     print("  - careerPatches.lua logs full protected-call tracebacks")
     print("  - careerPatches.lua current RLS runtime guards verified")
+    print("  - careerPatches.lua installs RLS guards continuously/idempotently")
     print("  - careerMPEnabler.lua has MP-only stable-level sync fallback (15s)")
 
 
