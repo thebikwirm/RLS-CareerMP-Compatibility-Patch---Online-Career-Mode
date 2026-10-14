@@ -10,6 +10,17 @@ rem then fall back to any RLS career-overhaul zip in the build folder.
 set "RLS="
 if exist "%BUILDROOT%\rls_career_overhaul_2.6.7.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_2.6.7.zip"
 if not defined RLS if exist "%BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip"
+if not defined RLS (
+  for %%F in ("%BUILDROOT%\rls_career_overhaul*.zip") do (
+    if exist "%%~fF" if not defined RLS set "RLS=%%~fF"
+  )
+)
+
+set "CAREERMP="
+if exist "%BUILDROOT%\CareerMP.zip" set "CAREERMP=%BUILDROOT%\CareerMP.zip"
+
+set "BEAMMP="
+if exist "%BUILDROOT%\BeamMP.zip" set "BEAMMP=%BUILDROOT%\BeamMP.zip"
 set "RLS_ARG="
 if defined RLS (
   echo RLS:      %RLS%
