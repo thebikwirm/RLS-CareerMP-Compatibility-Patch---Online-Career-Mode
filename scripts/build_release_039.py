@@ -157,16 +157,18 @@ function M.dumpSummary()
   for name in pairs(features) do table.insert(names, name) end
   table.sort(names)
 
+  summaryPrinted = true
+
   for _, name in ipairs(names) do
     local state = features[name]
     local line = string.format("[%s] %s (attempts=%d)", state.state, name, state.attempts)
     if state.lastError then
       line = line .. " :: " .. state.lastError:gsub("[\r\n]+", " | ")
     end
-    log(state.state == "loaded" or state.state == "recovered" and "I" or "W", logTag, line)
+    local level = (state.state == "loaded" or state.state == "recovered") and "I" or "W"
+    log(level, logTag, line)
   end
   log("I", logTag, "============================================")
-  summaryPrinted = true
   return features
 end
 
