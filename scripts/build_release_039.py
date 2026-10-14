@@ -1034,24 +1034,46 @@ def main() -> int:
     cmp_size = careermp_out.stat().st_size
     cmp_hash = sha256sum(careermp_out)
 
+    beammp_size = None
+    beammp_hash = None
+    if beammp_original and beammp_out:
+        beammp_entries = read_zip_entries(beammp_original)
+        patch_beammp_039_ui(beammp_entries)
+        write_zip(beammp_out, beammp_entries, engine=args.zip_engine)
+        beammp_size = beammp_out.stat().st_size
+        beammp_hash = sha256sum(beammp_out)
+
     checksums = out_dir / "checksums.txt"
-    checksums.write_text(
-        "\n".join(
-            [
-                f"{rls_hash}  {rls_out.name}",
-                f"{cmp_hash}  {careermp_out.name}",
-                "",
-                f"{rls_out.name} size={rls_size}",
-                f"{careermp_out.name} size={cmp_size}",
-                "CareerMP-0.39 patched: profile return preservation + traceback diagnostics",
-                f"zip_engine={describe_zip_engine(args.zip_engine)}",
-            ]
-        ),
-        encoding="utf-8",
+    checksum_lines = [
+        f"{rls_hash}  {rls_out.name}",
+        f"{cmp_hash}  {careermp_out.name}",
+    ]
+    if beammp_out and beammp_hash:
+        checksum_lines.append(f"{beammp_hash}  {beammp_out.name}")
+    checksum_lines.extend(
+        [
+            "",
+            f"{rls_out.name} size={rls_size}",
+            f"{careermp_out.name} size={cmp_size}",
+        ]
     )
+    if beammp_out and beammp_size is not None:
+        checksum_lines.append(f"{beammp_out.name} size={beammp_size}")
+        checksum_lines.append(
+            "BeamMP patched: direct child-route handoff + packaged UI asset paths"
+        )
+    checksum_lines.extend(
+        [
+            "CareerMP-0.39 patched: profile return preservation + traceback diagnostics",
+            f"zip_engine={describe_zip_engine(args.zip_engine)}",
+        ]
+    )
+    checksums.write_text("\n".join(checksum_lines), encoding="utf-8")
 
     print(f"Built: {rls_out}")
     print(f"Built patched CareerMP: {careermp_out}")
+    if beammp_out:
+        print(f"Built patched BeamMP: {beammp_out}")
     print(f"Wrote: {checksums}")
 
     if server_root:
