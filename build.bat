@@ -21,35 +21,32 @@ if exist "%BUILDROOT%\CareerMP.zip" set "CAREERMP=%BUILDROOT%\CareerMP.zip"
 
 set "BEAMMP="
 if exist "%BUILDROOT%\BeamMP.zip" set "BEAMMP=%BUILDROOT%\BeamMP.zip"
-set "RLS_ARG="
 if defined RLS (
   echo RLS:      %RLS%
-  set "RLS_ARG=--rls-original ^"%RLS%^""
 ) else (
+  set "RLS=%BUILDROOT%\rls_career_overhaul_2.6.7.zip"
   echo RLS:      [missing - rebuild skipped]
 )
 
-set "CAREERMP_ARG="
 if defined CAREERMP (
   echo CareerMP: %CAREERMP%
-  set "CAREERMP_ARG=--careermp-039 ^"%CAREERMP%^""
 ) else (
+  set "CAREERMP=%BUILDROOT%\CareerMP.zip"
   echo CareerMP: [missing - rebuild skipped]
 )
 
-set "BEAMMP_ARG="
 if defined BEAMMP (
   echo BeamMP:   %BEAMMP%
-  set "BEAMMP_ARG=--beammp-original ^"%BEAMMP%^""
 ) else (
+  set "BEAMMP=%BUILDROOT%\BeamMP.zip"
   echo BeamMP:   [missing - rebuild skipped]
 )
 
 echo.
 python .\scripts\build_release_039.py ^
-  %RLS_ARG% ^
-  %CAREERMP_ARG% ^
-  %BEAMMP_ARG% ^
+  --rls-original "%RLS%" ^
+  --careermp-039 "%CAREERMP%" ^
+  --beammp-original "%BEAMMP%" ^
   --server-root "%SERVER%" ^
   --rls-install-name "rls_career_overhaul_2.6.7_careermp_compatible.zip" ^
   --zip-engine python
