@@ -141,6 +141,10 @@ local function stateCounts()
   return counts
 end
 
+function M.retryPending()
+  retryPending()
+end
+
 function M.dumpSummary()
   local counts = stateCounts()
   log("I", logTag, "========== CareerMP feature health ==========")
@@ -236,6 +240,18 @@ end
             )
         text = text.replace(old, new, 1)
 
+    if "loadPersistent('careerMP/dragSync')" in text and "watchdog.dumpSummary()" not in text:
+        text = text.replace(
+            "loadPersistent('careerMP/dragSync')",
+            """loadPersistent('careerMP/dragSync')
+
+local watchdog = extensions and extensions["careerMP_watchdog"]
+if watchdog and watchdog.dumpSummary then
+\twatchdog.dumpSummary()
+end""",
+            1,
+        )
+
     entries[modscript_path] = text.encode("utf-8")
     print("CareerMP feature watchdog installed:")
     print("  - protected feature loading")
@@ -287,6 +303,27 @@ end
 
     text = payload.decode("utf-8").replace("\r\n", "\n")
     old = """local function installRLS039RuntimeGuards()
+\t-- RLS 2.6.x markerInteraction can query BeamNG 0.39's empty KD-tree
+\t-- representation (itemCount=0/tree=nil) every frame. Guard the getter at
+\t-- runtime so RLS override precedence cannot replace this compatibility fix.
+\tlocal markerExt = type(extensions) == "table" and extensions["gameplay_playmodeMarkers"] or nil
+\tif markerExt and markerExt.getPlaymodeClustersAsQuadtree and not markerExt.__careerMP39EmptyQtGuard then
+\t\tlocal originalGetQt = markerExt.getPlaymodeClustersAsQuadtree
+\t\tlocal emptyQt = {}
+\t\tfunction emptyQt:queryNotNested(...)
+\t\t\treturn function() return nil end
+\t\tend
+\t\tmarkerExt.getPlaymodeClustersAsQuadtree = function(...)
+\t\t\tlocal clusters = markerExt.getPlaymodeClusters and markerExt.getPlaymodeClusters() or nil
+\t\t\tif not clusters or next(clusters) == nil then
+\t\t\t\treturn emptyQt
+\t\t\tend
+\t\t\treturn originalGetQt(...)
+\t\tend
+\t\tmarkerExt.__careerMP39EmptyQtGuard = true
+\t\tlog("I", logTag, "installed BeamNG 0.39 empty marker-quadtree runtime guard")
+\tend
+
 \tlocal deliveryExt = type(extensions) == "table" and extensions["career_modules_delivery_general"] or career_modules_delivery_general
 \tif deliveryExt and deliveryExt.getDeliveryModePenalty then
 \t\tif not deliveryExt.__careerMP39PenaltyGuard then
@@ -447,6 +484,7 @@ end
         "playerAttributes preload did not resolve before career activation",
         "reordered career module batch before activation",
         "delivery penalty requested before delivery modules were ready; using zero penalty",
+        "installed BeamNG 0.39 empty marker-quadtree runtime guard",
     )
 
     if old in text:
@@ -492,6 +530,27 @@ end
         )
 
     entries[patches_path] = text.encode("utf-8")
+
+    enabler_path = "lua/ge/extensions/careerMPEnabler.lua"
+    enabler_payload = entries.get(enabler_path)
+    if enabler_payload:
+        enabler_text = enabler_payload.decode("utf-8").replace("\\r\\n", "\\n")
+        if "CareerMP watchdog world-ready checkpoint" not in enabler_text:
+            world_ready_pattern = re.compile(
+                r"(function M\.onWorldReadyState\([^\n]*\)\n)",
+                re.MULTILINE,
+            )
+            match = world_ready_pattern.search(enabler_text)
+            if match:
+                injection = """\\1\\t-- CareerMP watchdog world-ready checkpoint
+\\tlocal watchdog = extensions and extensions[\"careerMP_watchdog\"]
+\\tif watchdog and watchdog.retryPending then watchdog.retryPending() end
+\\tif watchdog and watchdog.dumpSummary then watchdog.dumpSummary() end
+"""
+                enabler_text = world_ready_pattern.sub(injection, enabler_text, count=1)
+                entries[enabler_path] = enabler_text.encode("utf-8")
+            else:
+                print("  - watchdog world-ready checkpoint not inserted: onWorldReadyState layout not found")
 
     print("Patched CareerMP-0.39:")
     print("  - compat.lua preserves native multiple return values")
