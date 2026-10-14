@@ -1056,6 +1056,215 @@ end
                 "CareerMP BeamMP loadLevel sync fallback v4 marker missing after patch"
             )
 
+        # V5: Queue profile activation from rxCareerSync and retry until BeamNG
+        # actually reports career_career.isActive(). Do not trust the return
+        # value of createOrLoadCareerAndStart(): BeamNG may complete activation
+        # without returning a truthy value.
+        activation_marker = "CareerMP 0.39 queued career activation retry v5"
+        if activation_marker not in enabler_text:
+            state_anchor_v5 = """local beamMPLevelLoadWrapped = false
+"""
+            state_replacement_v5 = """local beamMPLevelLoadWrapped = false
+
+-- CareerMP 0.39 queued career activation retry v5
+local pendingCareerStart = false
+local pendingCareerProfile = nil
+local pendingCareerStartElapsed = 0
+local pendingCareerRetryDelay = 5
+local pendingCareerAttempt = 0
+local pendingCareerMaxAttempts = 12
+local careerStartInProgress = false
+"""
+            if state_anchor_v5 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install queued career activation state; "
+                    "BeamMP loadLevel fallback state layout changed"
+                )
+            enabler_text = enabler_text.replace(
+                state_anchor_v5, state_replacement_v5, 1
+            )
+
+            rx_pattern = re.compile(
+                r"local function rxCareerSync\(data\)\n.*?\nend\n\nlocal function rxClientConfigUpdate",
+                re.DOTALL,
+            )
+            rx_match = rx_pattern.search(enabler_text)
+            if not rx_match:
+                raise RuntimeError(
+                    "Unable to replace rxCareerSync with queued activation; "
+                    "careerMPEnabler.lua source layout changed"
+                )
+
+            rx_replacement = r'''local function queueCareerStart(profileName, reason)
+	if careerMPActive then return end
+	pendingCareerProfile = profileName
+	pendingCareerStart = true
+	pendingCareerStartElapsed = 0
+	pendingCareerAttempt = 0
+	log("I", logTag, "queued career profile '" .. tostring(profileName) ..
+		"' for activation (" .. tostring(reason) .. ")")
+end
+
+local function rxCareerSync(data)
+	clientConfig = jsonDecode(data)
+	if not clientConfig then
+		log("E", logTag, "rxCareerSync: could not decode client config")
+		return
+	end
+
+	nickname = MPConfig.getNickname()
+	settingsCheck()
+	actionsCheck()
+
+	local profileName = resolveProfileName()
+	log("I", logTag, string.format(
+		"received CareerMP server config; profile='%s' nickname='%s' startMode='%s'",
+		profileName, tostring(nickname), compat.defaultStartMode))
+
+	if careerMPActive then return end
+	queueCareerStart(profileName, "rxCareerSync")
+end
+
+local function rxClientConfigUpdate'''
+            enabler_text = rx_pattern.sub(rx_replacement, enabler_text, count=1)
+
+            update_anchor_v5 = """local function onUpdate(dtReal, dtSim, dtRaw)
+	-- BeamMP's own map-load call is the most reliable 0.39 join milestone.
+"""
+            update_replacement_v5 = """local function isCareerActuallyActive()
+	local career = extensions and extensions["career_career"] or career_career
+	if not (career and type(career.isActive) == "function") then
+		return false
+	end
+	local ok, active = pcall(career.isActive)
+	return ok and active == true
+end
+
+local function processPendingCareerStart(dtReal)
+	if careerMPActive then
+		pendingCareerStart = false
+		return
+	end
+
+	if isCareerActuallyActive() then
+		careerMPActive = true
+		pendingCareerStart = false
+		careerStartInProgress = false
+		log("I", logTag, "career activation confirmed active" ..
+			(pendingCareerProfile and (" for profile '" .. pendingCareerProfile .. "'") or ""))
+		return
+	end
+
+	if not pendingCareerStart or not pendingCareerProfile then return end
+	pendingCareerStartElapsed = pendingCareerStartElapsed + (dtReal or 0)
+	if pendingCareerStartElapsed < pendingCareerRetryDelay then return end
+	pendingCareerStartElapsed = 0
+
+	if pendingCareerAttempt >= pendingCareerMaxAttempts then
+		log("E", logTag, "career activation retry limit reached for profile '" ..
+			tostring(pendingCareerProfile) .. "'")
+		pendingCareerStart = false
+		return
+	end
+
+	local careerPatches = extensions and extensions["careerMP_careerPatches"]
+	if not (careerPatches and careerPatches.ensure and careerPatches.ensure()) then
+		log("W", logTag, "career activation retry waiting: protection patches not ready")
+		return
+	end
+
+	pendingCareerAttempt = pendingCareerAttempt + 1
+	careerStartInProgress = true
+	log("W", logTag, "career activation attempt " .. tostring(pendingCareerAttempt) ..
+		"/" .. tostring(pendingCareerMaxAttempts) .. " for profile '" ..
+		tostring(pendingCareerProfile) .. "'")
+
+	local ok, resultOrErr = xpcall(function()
+		return careerPatches.withRemoteVehiclesProtected(function()
+			return compat.createOrLoadCareerAndStart(
+				pendingCareerProfile,
+				false,
+				compat.defaultStartMode
+			)
+		end)
+	end, debug.traceback)
+
+	careerStartInProgress = false
+
+	if not ok then
+		log("E", logTag, "career activation attempt threw:\n" .. tostring(resultOrErr))
+		return
+	end
+
+	if isCareerActuallyActive() then
+		careerMPActive = true
+		pendingCareerStart = false
+		log("I", logTag, "career activation confirmed immediately for profile '" ..
+			tostring(pendingCareerProfile) .. "'")
+	else
+		log("W", logTag, "career start call returned '" .. tostring(resultOrErr) ..
+			"' but career is still inactive; will retry")
+	end
+end
+
+local function onUpdate(dtReal, dtSim, dtRaw)
+	processPendingCareerStart(dtReal)
+
+	-- BeamMP's own map-load call is the most reliable 0.39 join milestone.
+"""
+            if update_anchor_v5 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install queued career activation processor; "
+                    "onUpdate BeamMP fallback layout changed"
+                )
+            enabler_text = enabler_text.replace(
+                update_anchor_v5, update_replacement_v5, 1
+            )
+
+            old_oncareer = """local function onCareerActive(active)
+	if not (active and careerMPActive) then return end
+"""
+            new_oncareer = """local function onCareerActive(active)
+	if not active then return end
+	if careerStartInProgress or pendingCareerStart then
+		careerMPActive = true
+		pendingCareerStart = false
+		careerStartInProgress = false
+		log("I", logTag, "onCareerActive confirmed CareerMP activation")
+	end
+	if not careerMPActive then return end
+"""
+            if old_oncareer not in enabler_text:
+                raise RuntimeError(
+                    "Unable to update onCareerActive for queued activation"
+                )
+            enabler_text = enabler_text.replace(
+                old_oncareer, new_oncareer, 1
+            )
+
+            leave_anchor_v5 = """	beamMPLevelLoadElapsed = 0
+end
+"""
+            leave_replacement_v5 = """	beamMPLevelLoadElapsed = 0
+	pendingCareerStart = false
+	pendingCareerProfile = nil
+	pendingCareerStartElapsed = 0
+	pendingCareerAttempt = 0
+	careerStartInProgress = false
+end
+"""
+            if leave_anchor_v5 in enabler_text:
+                enabler_text = enabler_text.replace(
+                    leave_anchor_v5, leave_replacement_v5, 1
+                )
+
+            print("  - CareerMP 0.39 queued career activation retry v5 installed")
+
+        if activation_marker not in enabler_text:
+            raise RuntimeError(
+                "CareerMP queued career activation retry v5 marker missing after patch"
+            )
+
         entries[enabler_path] = enabler_text.encode("utf-8")
         if "CareerMP watchdog world-ready checkpoint" not in enabler_text:
             world_ready_pattern = re.compile(
@@ -1082,6 +1291,7 @@ end
     print("  - careerMPEnabler.lua has MP-only stable-level sync fallback (15s)")
     print("  - careerMPEnabler.lua can direct-start a stable selected profile after 5s")
     print("  - careerMPEnabler.lua observes BeamMP loadLevel and requests sync after 10s")
+    print("  - careerMPEnabler.lua queues/retries career activation until isActive() is true")
 
 
 def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
