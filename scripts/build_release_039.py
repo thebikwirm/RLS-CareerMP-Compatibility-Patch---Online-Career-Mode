@@ -1265,10 +1265,20 @@ end
                 "CareerMP queued career activation retry v5 marker missing after patch"
             )
 
+        # Repair CareerMP.zip files produced by the first V5 builder. Because
+        # built-039/CareerMP.zip can be both the source and output, a subsequent
+        # build may ingest an already-patched enabler containing the old literal
+        # newline. Heal it before validation so rebuilds are idempotent.
+        broken_traceback = 'career activation attempt threw:' + "\n" + '" .. tostring(resultOrErr)'
+        expected_traceback = 'career activation attempt threw:\\n" .. tostring(resultOrErr)'
+        if broken_traceback in enabler_text:
+            enabler_text = enabler_text.replace(
+                broken_traceback, expected_traceback
+            )
+            print("  - repaired legacy broken V5 traceback string in CareerMP enabler")
+
         # Guard against accidentally emitting a literal newline inside the Lua
         # quoted traceback message (which makes careerMPEnabler.lua unloadable).
-        broken_traceback = 'career activation attempt threw:' + "\n" + '"'
-        expected_traceback = 'career activation attempt threw:\\n" .. tostring(resultOrErr)'
         if broken_traceback in enabler_text:
             raise RuntimeError(
                 "Generated careerMPEnabler.lua contains broken multiline Lua string"
