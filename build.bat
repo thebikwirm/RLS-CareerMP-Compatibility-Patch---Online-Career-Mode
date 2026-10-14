@@ -2,20 +2,52 @@
 setlocal
 cd /d "%~dp0"
 
-set "RLS=C:\BeamNG-Mod-Build\rls_career_overhaul_2.6.7.zip"
-set "CAREERMP=C:\BeamNG-Mod-Build\CareerMP.zip"
-set "BEAMMP=C:\BeamNG-Mod-Build\BeamMP.zip"
+set "BUILDROOT=C:\BeamNG-Mod-Build"
 set "SERVER=D:\beamng_server"
+
+rem Prefer clean source archives, but tolerate the filenames used by earlier builds.
+set "RLS="
+if exist "%BUILDROOT%\rls_career_overhaul_2.6.7.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_2.6.7.zip"
+if not defined RLS if exist "%BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip"
+
+set "CAREERMP="
+if exist "%BUILDROOT%\CareerMP.zip" set "CAREERMP=%BUILDROOT%\CareerMP.zip"
+
+set "BEAMMP="
+if exist "%BUILDROOT%\BeamMP.zip" set "BEAMMP=%BUILDROOT%\BeamMP.zip"
 
 echo.
 echo ==========================================
 echo  RLS + CareerMP + BeamMP 0.39.4 Builder
 echo ==========================================
 echo.
+echo Build root: %BUILDROOT%
+echo Server:     %SERVER%
+echo.
+
+if not defined RLS (
+  echo ERROR: No RLS input zip found.
+  echo Expected one of:
+  echo   %BUILDROOT%\rls_career_overhaul_2.6.7.zip
+  echo   %BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip
+  goto :fail
+)
+
+if not defined CAREERMP (
+  echo ERROR: CareerMP.zip not found:
+  echo   %BUILDROOT%\CareerMP.zip
+  goto :fail
+)
+
+if not defined BEAMMP (
+  echo ERROR: BeamMP.zip not found:
+  echo   %BUILDROOT%\BeamMP.zip
+  goto :fail
+)
+
 echo RLS:      %RLS%
 echo CareerMP: %CAREERMP%
 echo BeamMP:   %BEAMMP%
-echo Server:   %SERVER%
 echo.
 
 python .\scripts\build_release_039.py ^
@@ -26,14 +58,7 @@ python .\scripts\build_release_039.py ^
   --rls-install-name "rls_career_overhaul_2.6.7_careermp_compatible.zip" ^
   --zip-engine python
 
-if errorlevel 1 (
-  echo.
-  echo ==========================================
-  echo  BUILD FAILED
-  echo ==========================================
-  pause
-  exit /b 1
-)
+if errorlevel 1 goto :fail
 
 echo.
 echo ==========================================
@@ -47,3 +72,13 @@ echo Installed server resources are in:
 echo   %SERVER%\Resources\Client
 echo.
 pause
+exit /b 0
+
+:fail
+echo.
+echo ==========================================
+echo  BUILD FAILED
+echo ==========================================
+echo.
+pause
+exit /b 1
