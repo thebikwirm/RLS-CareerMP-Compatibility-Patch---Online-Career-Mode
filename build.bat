@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-set "BUILDROOT=C:\BeamNG-Mod-Build"
+set "BUILDROOT=C:\Users\Carl\source\repos\thebikwirm\RLS-CareerMP-Compatibility-Patch---Online-Career-Mode\built-039"
 set "SERVER=D:\beamng_server"
 
 rem Prefer clean source archives, but tolerate the filenames used by earlier builds.
