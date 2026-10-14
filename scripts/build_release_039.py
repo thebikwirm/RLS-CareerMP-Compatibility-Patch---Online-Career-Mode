@@ -1033,8 +1033,11 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     rls_patch_dir = repo_root / "patches" / "RLS"
+    # Always use one canonical RLS output name. The previous builder derived
+    # the filename from the input archive, so rebuilding an already-compatible
+    # zip produced names such as *_careermp_compatible_careermp039_compatible.zip.
     rls_out = (
-        out_dir / f"{rls_original.stem}_careermp039_compatible.zip"
+        out_dir / "rls_career_overhaul_2.6.7_careermp_compatible.zip"
         if rls_original
         else None
     )
@@ -1053,6 +1056,17 @@ def main() -> int:
             apply_legacy_online_save_timing=False,
             apply_legacy_override_manager_patch=False,
         )
+
+        # Clean up filenames created by older versions of this builder.
+        for stale_rls in out_dir.glob(
+            "rls_career_overhaul*_careermp_compatible_careermp039_compatible.zip"
+        ):
+            if stale_rls.resolve() != rls_out.resolve():
+                try:
+                    stale_rls.unlink()
+                    print(f"Removed stale nested RLS artifact: {stale_rls.name}")
+                except OSError as exc:
+                    print(f"WARNING: could not remove stale RLS artifact {stale_rls}: {exc}")
     else:
         print("SKIP RLS rebuild: no source zip supplied")
 
