@@ -352,6 +352,27 @@ local function withRemoteVehiclesProtected(fn, ...)
 end
 """
     new = """local function installRLS039RuntimeGuards()
+\t-- RLS 2.6.x markerInteraction can query BeamNG 0.39's empty KD-tree
+\t-- representation (itemCount=0/tree=nil) every frame. Guard the getter at
+\t-- runtime so RLS override precedence cannot replace this compatibility fix.
+\tlocal markerExt = type(extensions) == "table" and extensions["gameplay_playmodeMarkers"] or nil
+\tif markerExt and markerExt.getPlaymodeClustersAsQuadtree and not markerExt.__careerMP39EmptyQtGuard then
+\t\tlocal originalGetQt = markerExt.getPlaymodeClustersAsQuadtree
+\t\tlocal emptyQt = {}
+\t\tfunction emptyQt:queryNotNested(...)
+\t\t\treturn function() return nil end
+\t\tend
+\t\tmarkerExt.getPlaymodeClustersAsQuadtree = function(...)
+\t\t\tlocal clusters = markerExt.getPlaymodeClusters and markerExt.getPlaymodeClusters() or nil
+\t\t\tif not clusters or next(clusters) == nil then
+\t\t\t\treturn emptyQt
+\t\t\tend
+\t\t\treturn originalGetQt(...)
+\t\tend
+\t\tmarkerExt.__careerMP39EmptyQtGuard = true
+\t\tlog("I", logTag, "installed BeamNG 0.39 empty marker-quadtree runtime guard")
+\tend
+
 \tlocal deliveryExt = type(extensions) == "table" and extensions["career_modules_delivery_general"] or career_modules_delivery_general
 \tif deliveryExt and deliveryExt.getDeliveryModePenalty then
 \t\tif not deliveryExt.__careerMP39PenaltyGuard then
