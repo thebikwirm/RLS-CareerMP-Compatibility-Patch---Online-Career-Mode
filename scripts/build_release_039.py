@@ -950,8 +950,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Build the BeamNG 0.39.4 RLS compatibility zip for CareerMP-0.39."
     )
-    parser.add_argument("--rls-original", required=True, type=Path)
-    parser.add_argument("--careermp-039", required=True, type=Path)
+    parser.add_argument(
+        "--rls-original",
+        type=Path,
+        default=None,
+        help="Optional RLS source zip. Missing input skips the RLS rebuild.",
+    )
+    parser.add_argument(
+        "--careermp-039",
+        type=Path,
+        default=None,
+        help="Optional CareerMP-0.39 source zip. Missing input skips the CareerMP rebuild.",
+    )
     parser.add_argument(
         "--beammp-original",
         type=Path,
@@ -989,8 +999,16 @@ def main() -> int:
     add_zip_engine_argument(parser)
     args = parser.parse_args()
 
-    rls_original = args.rls_original.expanduser().resolve()
-    careermp_original = args.careermp_039.expanduser().resolve()
+    rls_original = (
+        args.rls_original.expanduser().resolve()
+        if args.rls_original
+        else None
+    )
+    careermp_original = (
+        args.careermp_039.expanduser().resolve()
+        if args.careermp_039
+        else None
+    )
     beammp_original = (
         args.beammp_original.expanduser().resolve()
         if args.beammp_original
@@ -999,132 +1017,161 @@ def main() -> int:
     out_dir = args.out_dir.expanduser().resolve()
     server_root = args.server_root.expanduser().resolve() if args.server_root else None
 
-    if not rls_original.is_file():
-        raise SystemExit(f"RLS original zip not found: {rls_original}")
-    if not careermp_original.is_file():
-        raise SystemExit(f"CareerMP 0.39 zip not found: {careermp_original}")
+    if rls_original and not rls_original.is_file():
+        print(f"SKIP RLS rebuild: input zip not found: {rls_original}")
+        rls_original = None
+    if careermp_original and not careermp_original.is_file():
+        print(f"SKIP CareerMP rebuild: input zip not found: {careermp_original}")
+        careermp_original = None
     if beammp_original and not beammp_original.is_file():
-        raise SystemExit(f"BeamMP zip not found: {beammp_original}")
+        print(f"SKIP BeamMP rebuild: input zip not found: {beammp_original}")
+        beammp_original = None
 
-    validate_careermp_039(careermp_original)
+    if careermp_original:
+        validate_careermp_039(careermp_original)
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
     rls_patch_dir = repo_root / "patches" / "RLS"
-    rls_out = out_dir / f"{rls_original.stem}_careermp039_compatible.zip"
-    careermp_out = out_dir / "CareerMP.zip"
-    beammp_out = out_dir / "BeamMP.zip" if beammp_original else None
-
-    rls_size, rls_hash = build_mod(
-        rls_original,
-        rls_patch_dir,
-        rls_out,
-        RLS_REMOVE_PREFIXES,
-        args.zip_engine,
-        apply_legacy_online_save_timing=False,
-        apply_legacy_override_manager_patch=False,
+    rls_out = (
+        out_dir / f"{rls_original.stem}_careermp039_compatible.zip"
+        if rls_original
+        else None
     )
+    careermp_out = out_dir / "CareerMP.zip"
+    beammp_out = out_dir / "BeamMP.zip"
 
-    # Keep CareerMP-0.39's architecture intact, but apply narrow 0.39.4 fixes
-    # required by the RLS integration.
-    careermp_entries = read_careermp_entries(careermp_original)
-    patch_careermp_039(careermp_entries)
-    install_careermp_watchdog(careermp_entries)
-    write_zip(careermp_out, careermp_entries, engine=args.zip_engine)
-    cmp_size = careermp_out.stat().st_size
-    cmp_hash = sha256sum(careermp_out)
+    rls_size = None
+    rls_hash = None
+    if rls_original and rls_out:
+        rls_size, rls_hash = build_mod(
+            rls_original,
+            rls_patch_dir,
+            rls_out,
+            RLS_REMOVE_PREFIXES,
+            args.zip_engine,
+            apply_legacy_online_save_timing=False,
+            apply_legacy_override_manager_patch=False,
+        )
+    else:
+        print("SKIP RLS rebuild: no source zip supplied")
+
+    cmp_size = None
+    cmp_hash = None
+    if careermp_original:
+        careermp_entries = read_careermp_entries(careermp_original)
+        patch_careermp_039(careermp_entries)
+        install_careermp_watchdog(careermp_entries)
+        write_zip(careermp_out, careermp_entries, engine=args.zip_engine)
+        cmp_size = careermp_out.stat().st_size
+        cmp_hash = sha256sum(careermp_out)
+    else:
+        print("SKIP CareerMP rebuild: no source zip supplied")
+        if careermp_out.is_file():
+            cmp_size = careermp_out.stat().st_size
+            cmp_hash = sha256sum(careermp_out)
 
     beammp_size = None
     beammp_hash = None
-    if beammp_original and beammp_out:
+    if beammp_original:
         beammp_entries = read_zip_entries(beammp_original)
         patch_beammp_039_ui(beammp_entries)
         write_zip(beammp_out, beammp_entries, engine=args.zip_engine)
         beammp_size = beammp_out.stat().st_size
         beammp_hash = sha256sum(beammp_out)
+    else:
+        print("SKIP BeamMP rebuild: no source zip supplied")
+        if beammp_out.is_file():
+            beammp_size = beammp_out.stat().st_size
+            beammp_hash = sha256sum(beammp_out)
 
     checksums = out_dir / "checksums.txt"
-    checksum_lines = [
-        f"{rls_hash}  {rls_out.name}",
-        f"{cmp_hash}  {careermp_out.name}",
-    ]
-    if beammp_out and beammp_hash:
+    checksum_lines = []
+    if rls_out and rls_hash:
+        checksum_lines.append(f"{rls_hash}  {rls_out.name}")
+    if cmp_hash:
+        checksum_lines.append(f"{cmp_hash}  {careermp_out.name}")
+    if beammp_hash:
         checksum_lines.append(f"{beammp_hash}  {beammp_out.name}")
-    checksum_lines.extend(
-        [
-            "",
-            f"{rls_out.name} size={rls_size}",
-            f"{careermp_out.name} size={cmp_size}",
-        ]
-    )
-    if beammp_out and beammp_size is not None:
+    checksum_lines.append("")
+    if rls_out and rls_size is not None:
+        checksum_lines.append(f"{rls_out.name} size={rls_size}")
+    if cmp_size is not None:
+        checksum_lines.append(f"{careermp_out.name} size={cmp_size}")
+    if beammp_size is not None:
         checksum_lines.append(f"{beammp_out.name} size={beammp_size}")
-        checksum_lines.append(
-            "BeamMP patched: direct child-route handoff + packaged UI asset paths"
-        )
-    checksum_lines.extend(
-        [
-            "CareerMP-0.39 patched: profile return preservation + traceback diagnostics",
-            f"zip_engine={describe_zip_engine(args.zip_engine)}",
-        ]
+    checksum_lines.append(
+        "Missing source inputs are skipped; existing built-039 artifacts are preserved."
     )
+    checksum_lines.append(f"zip_engine={describe_zip_engine(args.zip_engine)}")
     checksums.write_text("\n".join(checksum_lines), encoding="utf-8")
 
-    print(f"Built: {rls_out}")
-    print(f"Built patched CareerMP: {careermp_out}")
-    if beammp_out:
-        print(f"Built patched BeamMP: {beammp_out}")
+    if rls_out and rls_hash:
+        print(f"Built: {rls_out}")
+    elif not rls_original:
+        print("RLS: rebuild skipped")
+    if cmp_hash:
+        print(f"CareerMP available: {careermp_out}")
+    else:
+        print("CareerMP: no built artifact available")
+    if beammp_hash:
+        print(f"BeamMP available: {beammp_out}")
+    else:
+        print("BeamMP: no built artifact available")
     print(f"Wrote: {checksums}")
 
     if server_root:
         resources_client = server_root / "Resources" / "Client"
         resources_client.mkdir(parents=True, exist_ok=True)
 
-        install_name = args.rls_install_name or rls_out.name
-        installed_rls = resources_client / install_name
-        installed_careermp = resources_client / "CareerMP.zip"
-        installed_beammp = resources_client / "BeamMP.zip" if beammp_out else None
+        installed = []
 
-        shutil.copy2(rls_out, installed_rls)
-        shutil.copy2(careermp_out, installed_careermp)
-        if beammp_out and installed_beammp:
+        if rls_out and rls_out.is_file():
+            install_name = args.rls_install_name or rls_out.name
+            installed_rls = resources_client / install_name
+            shutil.copy2(rls_out, installed_rls)
+            installed_rls_hash = sha256sum(installed_rls)
+            if rls_hash and installed_rls_hash != rls_hash:
+                raise SystemExit(
+                    "RLS install verification failed: installed hash does not match built zip"
+                )
+            installed.append(("RLS", installed_rls, installed_rls_hash))
+        else:
+            print("SKIP RLS install: no built artifact available")
+
+        if careermp_out.is_file():
+            installed_careermp = resources_client / "CareerMP.zip"
+            shutil.copy2(careermp_out, installed_careermp)
+            installed_cmp_hash = sha256sum(installed_careermp)
+            if cmp_hash and installed_cmp_hash != cmp_hash:
+                raise SystemExit(
+                    "CareerMP install verification failed: installed hash does not match built zip"
+                )
+            installed.append(("CareerMP", installed_careermp, installed_cmp_hash))
+        else:
+            print("SKIP CareerMP install: no built artifact available")
+
+        if beammp_out.is_file():
+            installed_beammp = resources_client / "BeamMP.zip"
             shutil.copy2(beammp_out, installed_beammp)
+            installed_beammp_hash = sha256sum(installed_beammp)
+            if beammp_hash and installed_beammp_hash != beammp_hash:
+                raise SystemExit(
+                    "BeamMP install verification failed: installed hash does not match built zip"
+                )
+            installed.append(("BeamMP", installed_beammp, installed_beammp_hash))
+        else:
+            print("SKIP BeamMP install: no built artifact available")
 
-        installed_rls_hash = sha256sum(installed_rls)
-        installed_cmp_hash = sha256sum(installed_careermp)
-        installed_beammp_hash = (
-            sha256sum(installed_beammp)
-            if installed_beammp
-            else None
-        )
-
-        if installed_rls_hash != rls_hash:
-            raise SystemExit(
-                "RLS install verification failed: installed hash does not match built zip"
-            )
-        if installed_cmp_hash != cmp_hash:
-            raise SystemExit(
-                "CareerMP install verification failed: installed hash does not match source zip"
-            )
-        if beammp_hash and installed_beammp_hash != beammp_hash:
-            raise SystemExit(
-                "BeamMP install verification failed: installed hash does not match source zip"
-            )
-
-        print("")
-        print("Installed to BeamMP server:")
-        print(f"  {installed_rls}")
-        print(f"  {installed_careermp}")
-        if installed_beammp:
-            print(f"  {installed_beammp}")
-        print("")
-        print(f"Verified RLS SHA256:      {installed_rls_hash}")
-        print(f"Verified CareerMP SHA256: {installed_cmp_hash}")
-        if installed_beammp_hash:
-            print(f"Verified BeamMP SHA256:   {installed_beammp_hash}")
-        print("")
-        print("NOTE: remove any older/original RLS career overhaul zip from Resources/Client")
-        print("      so only the generated *_careermp039_compatible.zip is active.")
+        if installed:
+            print("")
+            print("Installed to BeamMP server:")
+            for label, path, digest in installed:
+                print(f"  {label}: {path}")
+                print(f"    SHA256: {digest}")
+        else:
+            print("")
+            print("No built artifacts were available to install.")
 
     return 0
 
