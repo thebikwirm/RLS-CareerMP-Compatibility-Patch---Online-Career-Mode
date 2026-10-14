@@ -5,10 +5,16 @@ cd /d "%~dp0"
 set "BUILDROOT=C:\BeamNG-Mod-Build"
 set "SERVER=D:\beamng_server"
 
-rem Prefer clean source archives, but tolerate the filenames used by earlier builds.
+rem Prefer the clean source archive, then known compatibility filename,
+rem then fall back to any RLS career-overhaul zip in the build folder.
 set "RLS="
 if exist "%BUILDROOT%\rls_career_overhaul_2.6.7.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_2.6.7.zip"
 if not defined RLS if exist "%BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip"
+if not defined RLS (
+  for %%F in ("%BUILDROOT%\rls_career_overhaul*.zip") do (
+    if not defined RLS set "RLS=%%~fF"
+  )
+)
 
 set "CAREERMP="
 if exist "%BUILDROOT%\CareerMP.zip" set "CAREERMP=%BUILDROOT%\CareerMP.zip"
@@ -27,9 +33,8 @@ echo.
 
 if not defined RLS (
   echo ERROR: No RLS input zip found.
-  echo Expected one of:
-  echo   %BUILDROOT%\rls_career_overhaul_2.6.7.zip
-  echo   %BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip
+  echo Expected something matching:
+  echo   %BUILDROOT%\rls_career_overhaul*.zip
   goto :fail
 )
 
