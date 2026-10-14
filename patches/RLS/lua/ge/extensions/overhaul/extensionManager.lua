@@ -152,6 +152,14 @@ local function startCareerMP39RuntimeIfReady()
 
     ensureCareerMP39CoreRuntime()
 
+    -- Load RLS core services before any career module that consumes them.
+    -- switchMap/challenge modules can be discovered immediately by the manual
+    -- career batch and expect overhaul_maps to exist synchronously.
+    loadExtensionIfNeeded("overhaul_settings")
+    loadExtensionIfNeeded("overhaul_maps")
+    loadExtensionIfNeeded("overhaul_clearLevels")
+    loadExtensionIfNeeded("overhaul_addMapChanges")
+
     -- Only now register the RLS gameplay stack as manual. Registering these
     -- before CareerMP owns a profile lets BeamNG's extension loader discover
     -- and start them during mod activation, which defeats the readiness gate.
