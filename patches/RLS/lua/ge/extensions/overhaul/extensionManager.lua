@@ -152,29 +152,41 @@ local function startCareerMP39RuntimeIfReady()
 
     ensureCareerMP39CoreRuntime()
 
-    -- Load RLS core services before any career module that consumes them.
-    -- switchMap/challenge modules can be discovered immediately by the manual
-    -- career batch and expect overhaul_maps to exist synchronously.
-    loadExtensionIfNeeded("overhaul_settings")
-    loadExtensionIfNeeded("overhaul_maps")
-    loadExtensionIfNeeded("overhaul_clearLevels")
-    loadExtensionIfNeeded("overhaul_addMapChanges")
+    -- The 0.39 compatibility runtime uses a phased loader rather than the
+    -- global loadManualUnloadExtensions() call. This keeps RLS dependency
+    -- layers deterministic and prevents BeamNG's resolver from repeatedly
+    -- unloading higher-level modules while their foundations are still absent.
+    loadExtensionIfNeeded("overhaul_orderedLoader")
+    loadExtensionIfNeeded("overhaul_mapRouter")
 
-    -- Only now register the RLS gameplay stack as manual. Registering these
-    -- before CareerMP owns a profile lets BeamNG's extension loader discover
-    -- and start them during mod activation, which defeats the readiness gate.
-    loadExtensions()
-    loadManualUnloadExtensions()
-    loadExtensionIfNeeded("vehicleMaintenance")
-    careerMP39RuntimeStarted = true
+    local orderedLoader =
+        type(extensions) == "table" and rawget(extensions, "overhaul_orderedLoader") or nil
 
-    local bridge = rawget(extensions, "overhaul_careermp39Compat")
-    local profileName, profilePath = bridge.getCurrentProfile()
-    log("I", "RLSCareerMP39",
-        "RLS profile-dependent runtime started for profile=" ..
-        tostring(profileName) .. " path=" .. tostring(profilePath))
+    if not orderedLoader or type(orderedLoader.start) ~= "function" then
+        log("E", "RLSCareerMP39", "ordered loader unavailable")
+        return false
+    end
 
-    return true
+    local started = orderedLoader.start(function(ok, failedPhase)
+        if not ok then
+            log("E", "RLSCareerMP39",
+                "ordered RLS runtime failed at phase=" .. tostring(failedPhase))
+            careerMP39RuntimeStarted = false
+            return
+        end
+
+        loadExtensions()
+        loadExtensionIfNeeded("vehicleMaintenance")
+        careerMP39RuntimeStarted = true
+
+        local bridge = rawget(extensions, "overhaul_careermp39Compat")
+        local profileName, profilePath = bridge.getCurrentProfile()
+        log("I", "RLSCareerMP39",
+            "RLS profile-dependent runtime started for profile=" ..
+            tostring(profileName) .. " path=" .. tostring(profilePath))
+    end)
+
+    return started or (orderedLoader.isRunning and orderedLoader.isRunning())
 end
 
 local function ensureDragRuntimeExtensions()
