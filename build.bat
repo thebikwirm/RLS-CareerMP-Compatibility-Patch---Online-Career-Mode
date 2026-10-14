@@ -10,55 +10,35 @@ rem then fall back to any RLS career-overhaul zip in the build folder.
 set "RLS="
 if exist "%BUILDROOT%\rls_career_overhaul_2.6.7.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_2.6.7.zip"
 if not defined RLS if exist "%BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_2.6.7_careermp_compatible.zip"
-if not defined RLS (
-  for %%F in ("%BUILDROOT%\rls_career_overhaul*.zip") do (
-    if not defined RLS set "RLS=%%~fF"
-  )
+set "RLS_ARG="
+if defined RLS (
+  echo RLS:      %RLS%
+  set "RLS_ARG=--rls-original ^"%RLS%^""
+) else (
+  echo RLS:      [missing - rebuild skipped]
 )
 
-set "CAREERMP="
-if exist "%BUILDROOT%\CareerMP.zip" set "CAREERMP=%BUILDROOT%\CareerMP.zip"
-
-set "BEAMMP="
-if exist "%BUILDROOT%\BeamMP.zip" set "BEAMMP=%BUILDROOT%\BeamMP.zip"
-
-echo.
-echo ==========================================
-echo  RLS + CareerMP + BeamMP 0.39.4 Builder
-echo ==========================================
-echo.
-echo Build root: %BUILDROOT%
-echo Server:     %SERVER%
-echo.
-
-if not defined RLS (
-  echo ERROR: No RLS input zip found.
-  echo Expected something matching:
-  echo   %BUILDROOT%\rls_career_overhaul*.zip
-  goto :fail
+set "CAREERMP_ARG="
+if defined CAREERMP (
+  echo CareerMP: %CAREERMP%
+  set "CAREERMP_ARG=--careermp-039 ^"%CAREERMP%^""
+) else (
+  echo CareerMP: [missing - rebuild skipped]
 )
 
-if not defined CAREERMP (
-  echo ERROR: CareerMP.zip not found:
-  echo   %BUILDROOT%\CareerMP.zip
-  goto :fail
+set "BEAMMP_ARG="
+if defined BEAMMP (
+  echo BeamMP:   %BEAMMP%
+  set "BEAMMP_ARG=--beammp-original ^"%BEAMMP%^""
+) else (
+  echo BeamMP:   [missing - rebuild skipped]
 )
 
-if not defined BEAMMP (
-  echo ERROR: BeamMP.zip not found:
-  echo   %BUILDROOT%\BeamMP.zip
-  goto :fail
-)
-
-echo RLS:      %RLS%
-echo CareerMP: %CAREERMP%
-echo BeamMP:   %BEAMMP%
 echo.
-
 python .\scripts\build_release_039.py ^
-  --rls-original "%RLS%" ^
-  --careermp-039 "%CAREERMP%" ^
-  --beammp-original "%BEAMMP%" ^
+  %RLS_ARG% ^
+  %CAREERMP_ARG% ^
+  %BEAMMP_ARG% ^
   --server-root "%SERVER%" ^
   --rls-install-name "rls_career_overhaul_2.6.7_careermp_compatible.zip" ^
   --zip-engine python
