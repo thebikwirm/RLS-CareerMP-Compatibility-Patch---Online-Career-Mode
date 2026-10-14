@@ -1265,6 +1265,71 @@ end
                 "CareerMP queued career activation retry v5 marker missing after patch"
             )
 
+        # V6: BeamMP 0.39 does not reliably drive careerMPEnabler.onUpdate during
+        # the join sequence. Start a jobsystem worker from onExtensionLoaded so
+        # sync and queued career activation no longer depend on world/update hooks.
+        jobsystem_marker = "CareerMP 0.39 jobsystem handshake fallback v6"
+        if jobsystem_marker not in enabler_text:
+            extension_anchor_v6 = """\tAddEventHandler("rxTrafficSignalTimer", rxTrafficSignalTimer)
+
+\tlog("I", logTag, "CareerMP Enabler LOADED (target BeamNG " .. compat.targetGameVersion .. ")")
+end
+"""
+            extension_replacement_v6 = """\tAddEventHandler("rxTrafficSignalTimer", rxTrafficSignalTimer)
+
+\t-- CareerMP 0.39 jobsystem handshake fallback v6
+\tif core_jobsystem and type(core_jobsystem.create) == "function" then
+\t\tcore_jobsystem.create(function(job)
+\t\t\tlog("I", logTag, "CareerMP jobsystem handshake worker started")
+\t\t\tfor workerAttempt = 1, 36 do
+\t\t\t\tif careerMPActive then
+\t\t\t\t\tlog("I", logTag, "CareerMP jobsystem worker exiting: career active")
+\t\t\t\t\treturn
+\t\t\t\tend
+
+\t\t\t\tjob.sleep(5)
+
+\t\t\t\tlocal inMPSession = MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession()
+\t\t\t\tif inMPSession then
+\t\t\t\t\tif not clientConfig then
+\t\t\t\t\t\tlog("W", logTag, "CareerMP jobsystem requesting server sync attempt " .. tostring(workerAttempt))
+\t\t\t\t\t\tTriggerServerEvent("prefabSyncRequested", "")
+\t\t\t\t\t\tTriggerServerEvent("careerSyncRequested", "")
+\t\t\t\t\t\tsyncRequested = true
+\t\t\t\t\telseif pendingCareerStart then
+\t\t\t\t\t\tprocessPendingCareerStart(5.1)
+\t\t\t\t\telseif isCareerActuallyActive() then
+\t\t\t\t\t\tcareerMPActive = true
+\t\t\t\t\t\tlog("I", logTag, "CareerMP jobsystem observed active career")
+\t\t\t\t\t\treturn
+\t\t\t\t\tend
+\t\t\t\tend
+\t\t\tend
+
+\t\t\tlog("E", logTag, "CareerMP jobsystem worker exhausted without activating career")
+\t\tend)
+\telse
+\t\tlog("E", logTag, "core_jobsystem unavailable; CareerMP jobsystem fallback not started")
+\tend
+
+\tlog("I", logTag, "CareerMP Enabler LOADED (target BeamNG " .. compat.targetGameVersion .. ")")
+end
+"""
+            if extension_anchor_v6 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install CareerMP jobsystem handshake fallback; "
+                    "onExtensionLoaded layout changed"
+                )
+            enabler_text = enabler_text.replace(
+                extension_anchor_v6, extension_replacement_v6, 1
+            )
+            print("  - CareerMP 0.39 jobsystem handshake fallback v6 installed")
+
+        if jobsystem_marker not in enabler_text:
+            raise RuntimeError(
+                "CareerMP jobsystem handshake fallback v6 marker missing after patch"
+            )
+
         # Repair CareerMP.zip files produced by the first V5 builder. Because
         # built-039/CareerMP.zip can be both the source and output, a subsequent
         # build may ingest an already-patched enabler containing the old literal
@@ -1315,6 +1380,7 @@ end
     print("  - careerMPEnabler.lua can direct-start a stable selected profile after 5s")
     print("  - careerMPEnabler.lua observes BeamMP loadLevel and requests sync after 10s")
     print("  - careerMPEnabler.lua queues/retries career activation until isActive() is true")
+    print("  - careerMPEnabler.lua starts a jobsystem handshake/activation worker")
 
 
 def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
