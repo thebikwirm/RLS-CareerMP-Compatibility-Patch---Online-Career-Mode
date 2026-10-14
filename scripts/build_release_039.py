@@ -558,6 +558,117 @@ end
     enabler_payload = entries.get(enabler_path)
     if enabler_payload:
         enabler_text = enabler_payload.decode("utf-8").replace("\\r\\n", "\\n")
+
+        # BeamNG/BeamMP 0.39 can finish loading the MP map without ever
+        # delivering onWorldReadyState(2) to CareerMP. Add a one-shot fallback
+        # armed by onClientPostStartMission so profile sync cannot stall forever.
+        fallback_marker = "CareerMP 0.39 world-ready fallback"
+        if fallback_marker not in enabler_text:
+            state_anchor = """local careerMPActive = false
+local syncRequested = false
+"""
+            state_replacement = """local careerMPActive = false
+local syncRequested = false
+
+-- CareerMP 0.39 world-ready fallback
+local syncFallbackArmed = false
+local syncFallbackElapsed = 0
+local syncFallbackDelay = 5
+"""
+            if state_anchor not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install CareerMP world-ready fallback state; "
+                    "careerMPEnabler.lua source layout changed"
+                )
+            enabler_text = enabler_text.replace(state_anchor, state_replacement, 1)
+
+            world_pattern = re.compile(
+                r"local function onWorldReadyState\(state\)\n.*?\nend\n\nlocal function onClientPostStartMission",
+                re.DOTALL,
+            )
+            world_match = world_pattern.search(enabler_text)
+            if not world_match:
+                raise RuntimeError(
+                    "Unable to install CareerMP world-ready fallback; "
+                    "onWorldReadyState/onClientPostStartMission layout changed"
+                )
+
+            replacement_block = r'''local function requestCareerSync(reason)
+	if syncRequested then return false end
+	if not (MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession()) then
+		return false
+	end
+
+	log("I", logTag, "requesting CareerMP sync (" .. tostring(reason) .. ")")
+	TriggerServerEvent("prefabSyncRequested", "")
+	TriggerServerEvent("careerSyncRequested", "")
+	syncRequested = true
+	syncFallbackArmed = false
+	return true
+end
+
+local function onWorldReadyState(state)
+	-- CareerMP watchdog world-ready checkpoint
+	local watchdog = extensions and extensions["careerMP_watchdog"]
+	if watchdog and watchdog.retryPending then watchdog.retryPending() end
+	if watchdog and watchdog.dumpSummary then watchdog.dumpSummary() end
+
+	if state == 2 then
+		requestCareerSync("worldReadyState=2")
+	end
+end
+
+local function onClientPostStartMission(levelPath)
+	patchTopBar()
+
+	if not syncRequested and MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession() then
+		syncFallbackArmed = true
+		syncFallbackElapsed = 0
+		log("I", logTag, "CareerMP 0.39 world-ready fallback armed after mission start: " .. tostring(levelPath))
+	end
+end
+
+local function onUpdate(dtReal, dtSim, dtRaw)
+	if syncFallbackArmed and not syncRequested then
+		syncFallbackElapsed = syncFallbackElapsed + (dtReal or 0)
+		if syncFallbackElapsed >= syncFallbackDelay then
+			if requestCareerSync("mission-start fallback after " .. tostring(syncFallbackDelay) .. "s") then
+				log("W", logTag, "worldReadyState=2 was not observed; CareerMP sync requested by fallback")
+			end
+		end
+	end
+
+	if worldReadyState ~= 2 or not clientConfig then return end
+'''
+            # Replace worldReady + post-start + opening of existing onUpdate.
+            old_segment = world_match.group(0)
+            # Drop the trailing onClientPostStartMission token from match and
+            # replace through the opening of onUpdate separately.
+            start = world_match.start()
+            # Find the existing onUpdate opening after the matched block.
+            update_start = enabler_text.find("local function onUpdate(dtReal, dtSim, dtRaw)", start)
+            if update_start == -1:
+                raise RuntimeError(
+                    "Unable to install CareerMP world-ready fallback; onUpdate not found"
+                )
+            existing_update_body_start = enabler_text.find("\n", update_start) + 1
+            # Preserve the existing onUpdate body after its first guard line.
+            guard_line = "\tif worldReadyState ~= 2 or not clientConfig then return end\n"
+            if not enabler_text.startswith(guard_line, existing_update_body_start):
+                raise RuntimeError(
+                    "Unable to install CareerMP world-ready fallback; onUpdate guard changed"
+                )
+            body_after_guard = existing_update_body_start + len(guard_line)
+            enabler_text = (
+                enabler_text[:start]
+                + replacement_block
+                + enabler_text[body_after_guard:]
+            )
+
+            print("  - CareerMP 0.39 world-ready sync fallback installed")
+
+        if fallback_marker not in enabler_text:
+            raise RuntimeError("CareerMP world-ready fallback marker missing after patch")
         if "CareerMP watchdog world-ready checkpoint" not in enabler_text:
             world_ready_pattern = re.compile(
                 r"(function M\.onWorldReadyState\([^\n]*\)\n)",
@@ -579,6 +690,7 @@ end
     print("  - compat.lua preserves native multiple return values")
     print("  - careerPatches.lua logs full protected-call tracebacks")
     print("  - careerPatches.lua current RLS runtime guards verified")
+    print("  - careerMPEnabler.lua has MP-only world-ready sync fallback")
 
 
 def main() -> int:
