@@ -11,6 +11,43 @@ local stopping = false
 local maxAttemptsPerPhase = 20
 local retryDelay = 0.5
 
+-- Explicit high-level RLS consumers. These may already have been discovered by
+-- BeamNG's career activation before the ordered loader takes its startup
+-- snapshot, so they cannot be identified reliably as "newly added" modules.
+-- Tear them down before inventory/property foundations disappear.
+local shutdownLeaves = {
+    "career_modules_business_tuningShopTechs",
+    "career_modules_business_tuningShopKits",
+    "career_modules_business_businessVehicleTuning",
+    "career_modules_business_businessVehicleModificationUtil",
+    "career_modules_business_businessPartCustomization",
+    "career_modules_business_businessPartInventory",
+    "career_modules_business_tuningShop",
+    "career_modules_business_racingTeam",
+    "career_modules_business_businessHelpers",
+    "career_modules_business_businessComputer",
+    "career_modules_business_businessSkillTree",
+    "career_modules_business_businessTabRegistry",
+    "career_modules_business_businessInventory",
+    "career_modules_business_businessManager",
+    "career_modules_usedCarAuctionNpcs",
+    "career_modules_usedCarAuctionLots",
+    "career_modules_usedCarAuction",
+    "career_modules_vehiclePopularity",
+    "career_modules_rlsRentals",
+    "career_modules_propertyRentals",
+    "career_modules_marketplaceCustomers",
+    "career_modules_carmeets",
+    "career_modules_enforcement",
+    "career_modules_damageManager",
+    "career_modules_assignRole",
+    "career_modules_globalEconomy",
+    "career_modules_pauseTime",
+    "career_modules_sleep",
+    "career_modules_stamina",
+    "career_modules_switchMap",
+}
+
 local phases = {
     {
         name = "rls-services",
@@ -268,8 +305,15 @@ function M.stop(reason)
     log("I", logTag, "ordered RLS shutdown beginning" ..
         (reason and (" (" .. tostring(reason) .. ")") or ""))
 
-    -- Modules discovered during the broad manual load are the leaves of the
-    -- dependency graph. Remove them before tearing down their foundations.
+    -- Explicit RLS leaf modules first. BeamNG may have loaded these during
+    -- career activation before our bulk-load snapshot, so snapshot-only
+    -- tracking is insufficient for a deterministic shutdown.
+    for index = 1, #shutdownLeaves do
+        requestUnload(shutdownLeaves[index])
+    end
+
+    -- Then unload any additional leaves that really were introduced by the
+    -- final broad manual load.
     for index = #finalManualLoaded, 1, -1 do
         requestUnload(finalManualLoaded[index])
     end
