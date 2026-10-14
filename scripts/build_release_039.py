@@ -1330,6 +1330,59 @@ end
                 "CareerMP jobsystem handshake fallback v6 marker missing after patch"
             )
 
+        # V7: avoid replacing BeamMP's initial 'play' navigation while the 0.39
+        # UI router is still completing its first handoff. The first career
+        # activation attempt waits through an extra jobsystem cycle (~10s from
+        # queueing); normal retries remain at 5s.
+        activation_settle_marker = "CareerMP 0.39 first activation settle v7"
+        if activation_settle_marker not in enabler_text:
+            state_anchor_v7 = """local pendingCareerRetryDelay = 5
+local pendingCareerAttempt = 0
+"""
+            state_replacement_v7 = """local pendingCareerRetryDelay = 5
+-- CareerMP 0.39 first activation settle v7
+local pendingCareerInitialDelay = 10
+local pendingCareerAttempt = 0
+"""
+            if state_anchor_v7 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install first activation settle state; "
+                    "V5 pending career state layout changed"
+                )
+            enabler_text = enabler_text.replace(
+                state_anchor_v7, state_replacement_v7, 1
+            )
+
+            delay_anchor_v7 = """	pendingCareerStartElapsed = pendingCareerStartElapsed + (dtReal or 0)
+	if pendingCareerStartElapsed < pendingCareerRetryDelay then return end
+	pendingCareerStartElapsed = 0
+"""
+            delay_replacement_v7 = """	pendingCareerStartElapsed = pendingCareerStartElapsed + (dtReal or 0)
+	local requiredDelay =
+		(pendingCareerAttempt == 0) and pendingCareerInitialDelay or pendingCareerRetryDelay
+	if pendingCareerStartElapsed < requiredDelay then return end
+	pendingCareerStartElapsed = 0
+	if pendingCareerAttempt == 0 then
+		log("I", logTag, "CareerMP initial activation settle complete after " ..
+			tostring(requiredDelay) .. "s")
+	end
+"""
+            if delay_anchor_v7 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install first activation settle delay; "
+                    "processPendingCareerStart layout changed"
+                )
+            enabler_text = enabler_text.replace(
+                delay_anchor_v7, delay_replacement_v7, 1
+            )
+
+            print("  - CareerMP 0.39 first activation settle v7 installed")
+
+        if activation_settle_marker not in enabler_text:
+            raise RuntimeError(
+                "CareerMP first activation settle v7 marker missing after patch"
+            )
+
         # Repair CareerMP.zip files produced by the first V5 builder. Because
         # built-039/CareerMP.zip can be both the source and output, a subsequent
         # build may ingest an already-patched enabler containing the old literal
@@ -1381,6 +1434,7 @@ end
     print("  - careerMPEnabler.lua observes BeamMP loadLevel and requests sync after 10s")
     print("  - careerMPEnabler.lua queues/retries career activation until isActive() is true")
     print("  - careerMPEnabler.lua starts a jobsystem handshake/activation worker")
+    print("  - careerMPEnabler.lua delays the first activation attempt to avoid BeamMP play-route collision")
 
 
 def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
