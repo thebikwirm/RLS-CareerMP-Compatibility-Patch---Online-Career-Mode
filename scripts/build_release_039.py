@@ -1166,16 +1166,12 @@ def main() -> int:
             print("SKIP CareerMP install: no built artifact available")
 
         if beammp_out.is_file():
-            installed_beammp = resources_client / "BeamMP.zip"
-            shutil.copy2(beammp_out, installed_beammp)
-            installed_beammp_hash = sha256sum(installed_beammp)
-            if beammp_hash and installed_beammp_hash != beammp_hash:
-                raise SystemExit(
-                    "BeamMP install verification failed: installed hash does not match built zip"
-                )
-            installed.append(("BeamMP", installed_beammp, installed_beammp_hash))
+            print(
+                "BeamMP client patch built but NOT copied to Resources/Client "
+                "(BeamMP must not be distributed as a server resource)"
+            )
         else:
-            print("SKIP BeamMP install: no built artifact available")
+            print("BeamMP client patch: no built artifact available")
 
         if installed:
             print("")
