@@ -669,6 +669,127 @@ local function onUpdate(dtReal, dtSim, dtRaw)
 
         if fallback_marker not in enabler_text:
             raise RuntimeError("CareerMP world-ready fallback marker missing after patch")
+
+        # V2: onClientPostStartMission is not guaranteed to reach CareerMP on
+        # BeamMP 0.39. Self-arm from onUpdate when BeamMP reports an MP session
+        # and getMissionFilename() has held a real level path long enough.
+        fallback_v2_marker = "CareerMP 0.39 level-loaded fallback v2"
+        if fallback_v2_marker not in enabler_text:
+            old_state = """-- CareerMP 0.39 world-ready fallback
+local syncFallbackArmed = false
+local syncFallbackElapsed = 0
+local syncFallbackDelay = 5
+"""
+            new_state = """-- CareerMP 0.39 world-ready fallback
+-- CareerMP 0.39 level-loaded fallback v2
+local syncFallbackArmed = false
+local syncFallbackElapsed = 0
+local syncFallbackDelay = 15
+local syncFallbackLevel = nil
+"""
+            if old_state not in enabler_text:
+                raise RuntimeError(
+                    "Unable to upgrade CareerMP world-ready fallback state to v2"
+                )
+            enabler_text = enabler_text.replace(old_state, new_state, 1)
+
+            old_post = """local function onClientPostStartMission(levelPath)
+\tpatchTopBar()
+
+\tif not syncRequested and MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession() then
+\t\tsyncFallbackArmed = true
+\t\tsyncFallbackElapsed = 0
+\t\tlog("I", logTag, "CareerMP 0.39 world-ready fallback armed after mission start: " .. tostring(levelPath))
+\tend
+end
+"""
+            new_post = """local function onClientPostStartMission(levelPath)
+\tpatchTopBar()
+
+\tif not syncRequested and MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession() then
+\t\tsyncFallbackArmed = true
+\t\tsyncFallbackElapsed = 0
+\t\tsyncFallbackLevel = tostring(levelPath or "")
+\t\tlog("I", logTag, "CareerMP 0.39 fallback armed from mission start: " .. syncFallbackLevel)
+\tend
+end
+"""
+            if old_post not in enabler_text:
+                raise RuntimeError(
+                    "Unable to upgrade CareerMP onClientPostStartMission fallback to v2"
+                )
+            enabler_text = enabler_text.replace(old_post, new_post, 1)
+
+            old_update = """local function onUpdate(dtReal, dtSim, dtRaw)
+\tif syncFallbackArmed and not syncRequested then
+\t\tsyncFallbackElapsed = syncFallbackElapsed + (dtReal or 0)
+\t\tif syncFallbackElapsed >= syncFallbackDelay then
+\t\t\tif requestCareerSync("mission-start fallback after " .. tostring(syncFallbackDelay) .. "s") then
+\t\t\t\tlog("W", logTag, "worldReadyState=2 was not observed; CareerMP sync requested by fallback")
+\t\t\tend
+\t\tend
+\tend
+
+\tif worldReadyState ~= 2 or not clientConfig then return end
+"""
+            new_update = """local function onUpdate(dtReal, dtSim, dtRaw)
+\tif not syncRequested and MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession() then
+\t\tlocal mission = ""
+\t\tif type(getMissionFilename) == "function" then
+\t\t\tmission = tostring(getMissionFilename() or "")
+\t\tend
+
+\t\tif mission ~= "" then
+\t\t\tif not syncFallbackArmed or syncFallbackLevel ~= mission then
+\t\t\t\tsyncFallbackArmed = true
+\t\t\t\tsyncFallbackElapsed = 0
+\t\t\t\tsyncFallbackLevel = mission
+\t\t\t\tlog("I", logTag, "CareerMP 0.39 level-loaded fallback armed: " .. mission)
+\t\t\telse
+\t\t\t\tsyncFallbackElapsed = syncFallbackElapsed + (dtReal or 0)
+\t\t\tend
+
+\t\t\tif syncFallbackElapsed >= syncFallbackDelay then
+\t\t\t\tif requestCareerSync("stable loaded level fallback after " .. tostring(syncFallbackDelay) .. "s") then
+\t\t\t\t\tlog("W", logTag, "worldReadyState=2 was not observed; CareerMP sync requested from stable level fallback")
+\t\t\t\tend
+\t\t\tend
+\t\telse
+\t\t\tsyncFallbackArmed = false
+\t\t\tsyncFallbackElapsed = 0
+\t\t\tsyncFallbackLevel = nil
+\t\tend
+\tend
+
+\tif worldReadyState ~= 2 or not clientConfig then return end
+"""
+            if old_update not in enabler_text:
+                raise RuntimeError(
+                    "Unable to upgrade CareerMP onUpdate fallback to v2"
+                )
+            enabler_text = enabler_text.replace(old_update, new_update, 1)
+
+            # Reset fallback state when leaving the server.
+            leave_old = """\tcareerMPActive = false
+\tsyncRequested = false
+end
+"""
+            leave_new = """\tcareerMPActive = false
+\tsyncRequested = false
+\tsyncFallbackArmed = false
+\tsyncFallbackElapsed = 0
+\tsyncFallbackLevel = nil
+end
+"""
+            if leave_old in enabler_text:
+                enabler_text = enabler_text.replace(leave_old, leave_new, 1)
+
+            print("  - CareerMP 0.39 stable-level sync fallback v2 installed")
+
+        if fallback_v2_marker not in enabler_text:
+            raise RuntimeError("CareerMP stable-level fallback v2 marker missing after patch")
+
+        entries[enabler_path] = enabler_text.encode("utf-8")
         if "CareerMP watchdog world-ready checkpoint" not in enabler_text:
             world_ready_pattern = re.compile(
                 r"(function M\.onWorldReadyState\([^\n]*\)\n)",
@@ -690,7 +811,7 @@ local function onUpdate(dtReal, dtSim, dtRaw)
     print("  - compat.lua preserves native multiple return values")
     print("  - careerPatches.lua logs full protected-call tracebacks")
     print("  - careerPatches.lua current RLS runtime guards verified")
-    print("  - careerMPEnabler.lua has MP-only world-ready sync fallback")
+    print("  - careerMPEnabler.lua has MP-only stable-level sync fallback (15s)")
 
 
 def main() -> int:
