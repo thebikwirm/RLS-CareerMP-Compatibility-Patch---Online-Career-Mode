@@ -6,6 +6,8 @@ local complete = false
 local failedPhase = nil
 local currentPhase = 0
 local phaseAttempts = {}
+local finalManualLoaded = {}
+local stopping = false
 local maxAttemptsPerPhase = 20
 local retryDelay = 0.5
 
@@ -121,12 +123,24 @@ local function runPhase(index)
     return false
 end
 
+local function snapshotLoadedExtensions()
+    local result = {}
+    if type(extensions) ~= "table" then return result end
+    for name, ext in pairs(extensions) do
+        if type(name) == "string" and ext ~= nil then
+            result[name] = true
+        end
+    end
+    return result
+end
+
 local function runBulkManualLoad()
     if type(loadManualUnloadExtensions) ~= "function" then
         log("E", logTag, "loadManualUnloadExtensions is unavailable")
         return false
     end
 
+    local before = snapshotLoadedExtensions()
     local ok, err = xpcall(function()
         loadManualUnloadExtensions()
     end, debug.traceback)
@@ -136,8 +150,34 @@ local function runBulkManualLoad()
         return false
     end
 
-    log("I", logTag, "final manual-extension load completed")
+    finalManualLoaded = {}
+    local after = snapshotLoadedExtensions()
+    for name in pairs(after) do
+        if not before[name] then
+            finalManualLoaded[#finalManualLoaded + 1] = name
+        end
+    end
+    table.sort(finalManualLoaded)
+
+    log("I", logTag,
+        "final manual-extension load completed; tracked " ..
+        tostring(#finalManualLoaded) .. " added extension(s)")
     return true
+end
+
+local function requestUnload(name)
+    if not name or not extensions or type(extensions.unload) ~= "function" then return end
+    if not isLoaded(name) then return end
+    local ok, err = pcall(extensions.unload, name)
+    if not ok then
+        log("W", logTag, "unload failed for " .. tostring(name) .. ": " .. tostring(err))
+    end
+end
+
+local function unloadListReverse(list)
+    for index = #(list or {}), 1, -1 do
+        requestUnload(list[index])
+    end
 end
 
 function M.start(onComplete)
@@ -161,6 +201,12 @@ function M.start(onComplete)
         log("I", logTag, "ordered RLS startup beginning")
 
         for index = 1, #phases do
+            if stopping then
+                running = false
+                log("W", logTag, "ordered RLS startup cancelled during shutdown")
+                if onComplete then pcall(onComplete, false, "cancelled") end
+                return
+            end
             currentPhase = index
             local ready = false
 
@@ -201,6 +247,51 @@ function M.start(onComplete)
     return true
 end
 
+function M.stop(reason)
+    if stopping then return true end
+    stopping = true
+
+    log("I", logTag, "ordered RLS shutdown beginning" ..
+        (reason and (" (" .. tostring(reason) .. ")") or ""))
+
+    -- Modules discovered during the broad manual load are the leaves of the
+    -- dependency graph. Remove them before tearing down their foundations.
+    for index = #finalManualLoaded, 1, -1 do
+        requestUnload(finalManualLoaded[index])
+    end
+
+    -- Tear the explicit dependency layers down in exact reverse startup order.
+    for phaseIndex = #phases, 1, -1 do
+        local phase = phases[phaseIndex]
+        unloadListReverse(phase.optional)
+        unloadListReverse(phase.required)
+        log("I", logTag,
+            string.format("shutdown phase %d/%d complete: %s",
+                phaseIndex, #phases, phase.name))
+    end
+
+    finalManualLoaded = {}
+    phaseAttempts = {}
+    currentPhase = 0
+    failedPhase = nil
+    complete = false
+    running = false
+    stopping = false
+
+    log("I", logTag, "ordered RLS shutdown complete")
+    return true
+end
+
+function M.reset()
+    finalManualLoaded = {}
+    phaseAttempts = {}
+    currentPhase = 0
+    failedPhase = nil
+    complete = false
+    running = false
+    stopping = false
+end
+
 function M.isRunning()
     return running
 end
@@ -216,6 +307,8 @@ function M.getState()
         failedPhase = failedPhase,
         currentPhase = currentPhase,
         phaseAttempts = phaseAttempts,
+        stopping = stopping,
+        finalManualLoadedCount = #finalManualLoaded,
     }
 end
 
