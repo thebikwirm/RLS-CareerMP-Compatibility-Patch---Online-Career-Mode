@@ -1002,6 +1002,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--beammp-client-target",
+        type=Path,
+        default=None,
+        help=(
+            "Optional client-side BeamMP.zip destination. Use the BeamNG user "
+            "mods/multiplayer path, not the BeamMP server Resources/Client folder."
+        ),
+    )
+    parser.add_argument(
         "--rls-install-name",
         default=None,
         help=(
@@ -1029,6 +1038,11 @@ def main() -> int:
     )
     out_dir = args.out_dir.expanduser().resolve()
     server_root = args.server_root.expanduser().resolve() if args.server_root else None
+    beammp_client_target = (
+        args.beammp_client_target.expanduser().resolve()
+        if args.beammp_client_target
+        else None
+    )
 
     if rls_original and not rls_original.is_file():
         print(f"SKIP RLS rebuild: input zip not found: {rls_original}")
@@ -1203,6 +1217,22 @@ def main() -> int:
         else:
             print("")
             print("No built artifacts were available to install.")
+
+    if beammp_client_target:
+        if beammp_out.is_file():
+            beammp_client_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(beammp_out, beammp_client_target)
+            installed_beammp_hash = sha256sum(beammp_client_target)
+            if beammp_hash and installed_beammp_hash != beammp_hash:
+                raise SystemExit(
+                    "BeamMP client install verification failed: installed hash does not match built zip"
+                )
+            print("")
+            print("Installed patched BeamMP client:")
+            print(f"  {beammp_client_target}")
+            print(f"  SHA256: {installed_beammp_hash}")
+        else:
+            print("SKIP BeamMP client install: no built BeamMP.zip available")
 
     return 0
 
