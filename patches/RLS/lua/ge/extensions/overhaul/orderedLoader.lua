@@ -123,6 +123,20 @@ local function runPhase(index)
     return false
 end
 
+local function shouldTrackBulkExtension(name)
+    if type(name) ~= "string" then return false end
+    if name:find("^careerMP") or name:find("^multiplayer_") then return false end
+    return
+        name:find("^career_modules_") ~= nil or
+        name:find("^gameplay_") ~= nil or
+        name:find("^overhaul_") ~= nil or
+        name:find("^ui_phone_") ~= nil or
+        name == "dynamicRoutes" or
+        name == "editor_dynamicRoutesEditor" or
+        name == "editor_freeroamEventEditor" or
+        name == "vehicleMaintenance"
+end
+
 local function snapshotLoadedExtensions()
     local result = {}
     if type(extensions) ~= "table" then return result end
@@ -153,7 +167,7 @@ local function runBulkManualLoad()
     finalManualLoaded = {}
     local after = snapshotLoadedExtensions()
     for name in pairs(after) do
-        if not before[name] then
+        if not before[name] and shouldTrackBulkExtension(name) then
             finalManualLoaded[#finalManualLoaded + 1] = name
         end
     end
@@ -260,8 +274,10 @@ function M.stop(reason)
         requestUnload(finalManualLoaded[index])
     end
 
-    -- Tear the explicit dependency layers down in exact reverse startup order.
-    for phaseIndex = #phases, 1, -1 do
+    -- Tear profile-dependent dependency layers down in reverse startup order.
+    -- Phase 1 (settings/maps) deliberately stays resident; it is profile
+    -- independent and keeping it warm prevents switchMap/POI races on re-entry.
+    for phaseIndex = #phases, 2, -1 do
         local phase = phases[phaseIndex]
         unloadListReverse(phase.optional)
         unloadListReverse(phase.required)
