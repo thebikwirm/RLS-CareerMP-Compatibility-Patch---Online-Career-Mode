@@ -4,6 +4,7 @@ cd /d "%~dp0"
 
 set "BUILDROOT=C:\Users\Carl\source\repos\thebikwirm\RLS-CareerMP-Compatibility-Patch---Online-Career-Mode\built-039"
 set "SERVER=D:\beamng_server"
+set "BEAMMP_CLIENT=D:\beamng stuff\current\mods\multiplayer\BeamMP.zip"
 
 rem Prefer the clean source archive, then known compatibility filename,
 rem then fall back to any RLS career-overhaul zip in the build folder.
@@ -48,6 +49,7 @@ python .\scripts\build_release_039.py ^
   --careermp-039 "%CAREERMP%" ^
   --beammp-original "%BEAMMP%" ^
   --server-root "%SERVER%" ^
+  --beammp-client-target "%BEAMMP_CLIENT%" ^
   --rls-install-name "rls_career_overhaul_2.6.7_careermp_compatible.zip" ^
   --zip-engine python
 
