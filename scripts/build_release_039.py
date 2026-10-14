@@ -1083,12 +1083,20 @@ def main() -> int:
         install_name = args.rls_install_name or rls_out.name
         installed_rls = resources_client / install_name
         installed_careermp = resources_client / "CareerMP.zip"
+        installed_beammp = resources_client / "BeamMP.zip" if beammp_out else None
 
         shutil.copy2(rls_out, installed_rls)
         shutil.copy2(careermp_out, installed_careermp)
+        if beammp_out and installed_beammp:
+            shutil.copy2(beammp_out, installed_beammp)
 
         installed_rls_hash = sha256sum(installed_rls)
         installed_cmp_hash = sha256sum(installed_careermp)
+        installed_beammp_hash = (
+            sha256sum(installed_beammp)
+            if installed_beammp
+            else None
+        )
 
         if installed_rls_hash != rls_hash:
             raise SystemExit(
@@ -1098,14 +1106,22 @@ def main() -> int:
             raise SystemExit(
                 "CareerMP install verification failed: installed hash does not match source zip"
             )
+        if beammp_hash and installed_beammp_hash != beammp_hash:
+            raise SystemExit(
+                "BeamMP install verification failed: installed hash does not match source zip"
+            )
 
         print("")
         print("Installed to BeamMP server:")
         print(f"  {installed_rls}")
         print(f"  {installed_careermp}")
+        if installed_beammp:
+            print(f"  {installed_beammp}")
         print("")
         print(f"Verified RLS SHA256:      {installed_rls_hash}")
         print(f"Verified CareerMP SHA256: {installed_cmp_hash}")
+        if installed_beammp_hash:
+            print(f"Verified BeamMP SHA256:   {installed_beammp_hash}")
         print("")
         print("NOTE: remove any older/original RLS career overhaul zip from Resources/Client")
         print("      so only the generated *_careermp039_compatible.zip is active.")
