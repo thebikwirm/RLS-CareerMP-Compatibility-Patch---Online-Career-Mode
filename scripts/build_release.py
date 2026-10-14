@@ -443,6 +443,74 @@ end
             print(f"BeamNG 0.39 removed stale racingTeamRaceFlow dependency: {business_path}")
 
 
+def patch_rls_039_disable_legacy_version_self_deactivate(entries: dict[str, bytes]) -> None:
+    """Disable RLS 2.6.x's legacy delayed self-deactivation on BeamNG 0.39.
+
+    Old RLS schedules a five-second checkVersion() job and deactivates mod id
+    RLSCO24 when the check fails. That gate predates the 0.39 compatibility
+    layer and tears down overrides/career dependencies during BeamMP resource
+    activation.
+    """
+
+    candidates = [
+        "lua/ge/extensions/overhaul/extensionManager.lua",
+        "lua/ge/extensions/overrides/overhaul/extensionManager.lua",
+    ]
+
+    marker = "RLSCareerMP39 skip legacy version self-deactivation"
+    patched = 0
+
+    for path in candidates:
+        payload = entries.get(path)
+        if not payload:
+            continue
+
+        text = payload.decode("utf-8").replace("\r\n", "\n")
+        if marker in text:
+            patched += 1
+            print(f"BeamNG 0.39 legacy RLS self-deactivation guard already present: {path}")
+            continue
+
+        old = '''    core_jobsystem.create(function(job)
+        job.sleep(5)
+        if not checkVersion() then
+            print("Deactivating RLS Career Overhaul")
+            core_modmanager.deactivateModId("RLSCO24")
+        end
+    end)
+'''
+
+        new = '''    -- RLSCareerMP39 skip legacy version self-deactivation
+    -- The original 2.6.x check targets an older BeamNG/RLS environment and
+    -- would tear the compatibility build down during BeamMP resource loading.
+    if not isCareerMP39() then
+        core_jobsystem.create(function(job)
+            job.sleep(5)
+            if not checkVersion() then
+                print("Deactivating RLS Career Overhaul")
+                core_modmanager.deactivateModId("RLSCO24")
+            end
+        end)
+    else
+        log("I", "RLSCareerMP39", "skipping legacy RLS version self-deactivation check")
+    end
+'''
+
+        if old not in text:
+            continue
+
+        text = text.replace(old, new, 1)
+        entries[path] = text.encode("utf-8")
+        patched += 1
+        print(f"BeamNG 0.39 disabled legacy RLS self-deactivation: {path}")
+
+    if patched == 0:
+        raise RuntimeError(
+            "BeamNG 0.39 RLS version self-deactivation guard matched zero files; "
+            "extensionManager.lua source layout changed."
+        )
+
+
 def patch_rls_039_marker_quadtree_guard(entries: dict[str, bytes]) -> None:
     """Skip RLS marker quadtree queries when there are no playmode clusters.
 
@@ -1266,6 +1334,7 @@ def patch_rls_entries(
     patch_rls_039_player_attributes(entries)
     patch_rls_039_runtime_api_guards(entries)
     patch_rls_039_batch_compat(entries)
+    patch_rls_039_disable_legacy_version_self_deactivate(entries)
     patch_rls_039_marker_quadtree_guard(entries)
     patch_rls_039_final_runtime_guards(entries)
     patch_rls_039_career_module_order(entries)
