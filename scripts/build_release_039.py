@@ -829,6 +829,147 @@ end
         if fallback_v2_marker not in enabler_text:
             raise RuntimeError("CareerMP stable-level fallback v2 marker missing after patch")
 
+        # V3: Some BeamMP/0.39 sessions restore/select the correct profile after
+        # the map loads without ever delivering worldReadyState=2 or rxCareerSync
+        # to CareerMP. In that state the save API has a valid profile/path but
+        # career_career remains inactive. Detect that stable state and start the
+        # current profile directly, still wrapped in remote-vehicle protection.
+        direct_start_marker = "CareerMP 0.39 direct profile-start fallback v3"
+        if direct_start_marker not in enabler_text:
+            state_anchor_v3 = """local syncFallbackLevel = nil
+"""
+            state_replacement_v3 = """local syncFallbackLevel = nil
+
+-- CareerMP 0.39 direct profile-start fallback v3
+local directStartProfileKey = nil
+local directStartElapsed = 0
+local directStartDelay = 5
+local directStartAttempted = false
+"""
+            if state_anchor_v3 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install CareerMP direct-start fallback state; "
+                    "stable-level fallback state layout changed"
+                )
+            enabler_text = enabler_text.replace(
+                state_anchor_v3, state_replacement_v3, 1
+            )
+
+            update_anchor_v3 = """local function onUpdate(dtReal, dtSim, dtRaw)
+"""
+            helper_v3 = """local function tryDirectCareerStart(dtReal)
+	if careerMPActive or directStartAttempted then return end
+	if not (MPCoreNetwork and MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession()) then
+		directStartProfileKey = nil
+		directStartElapsed = 0
+		return
+	end
+
+	local mission = ""
+	if type(getMissionFilename) == "function" then
+		mission = tostring(getMissionFilename() or "")
+	end
+	if mission == "" then
+		directStartProfileKey = nil
+		directStartElapsed = 0
+		return
+	end
+
+	local saveSystem = extensions and extensions["career_saveSystem"] or career_saveSystem
+	if not (saveSystem and saveSystem.getCurrentProfile) then return end
+
+	local okProfile, profileName, profilePath = pcall(saveSystem.getCurrentProfile)
+	if not okProfile then
+		return
+	end
+	profileName = tostring(profileName or "")
+	profilePath = tostring(profilePath or "")
+	if profileName == "" or profilePath == "" then
+		directStartProfileKey = nil
+		directStartElapsed = 0
+		return
+	end
+
+	local career = extensions and extensions["career_career"] or career_career
+	local alreadyActive = false
+	if career and career.isActive then
+		local okActive, active = pcall(career.isActive)
+		alreadyActive = okActive and active == true
+	end
+	if alreadyActive then
+		careerMPActive = true
+		directStartAttempted = true
+		log("I", logTag, "CareerMP direct-start fallback found career already active for profile '" .. profileName .. "'")
+		return
+	end
+
+	local profileKey = profileName .. "|" .. profilePath .. "|" .. mission
+	if directStartProfileKey ~= profileKey then
+		directStartProfileKey = profileKey
+		directStartElapsed = 0
+		log("I", logTag, "CareerMP direct-start candidate: profile='" .. profileName ..
+			"' path='" .. profilePath .. "' mission='" .. mission .. "'")
+		return
+	end
+
+	directStartElapsed = directStartElapsed + (dtReal or 0)
+	if directStartElapsed < directStartDelay then return end
+
+	local careerPatches = extensions and extensions["careerMP_careerPatches"]
+	if not (careerPatches and careerPatches.ensure and careerPatches.ensure()) then
+		log("W", logTag, "CareerMP direct-start waiting: career protection patches not ready")
+		directStartElapsed = 0
+		return
+	end
+
+	directStartAttempted = true
+	log("W", logTag, "CareerMP sync callbacks absent; directly starting current profile '" ..
+		profileName .. "' after " .. tostring(directStartDelay) .. "s stable")
+
+	local started = careerPatches.withRemoteVehiclesProtected(function()
+		return compat.createOrLoadCareerAndStart(profileName, false, compat.defaultStartMode)
+	end)
+
+	if started then
+		careerMPActive = true
+		log("I", logTag, "CareerMP direct-start fallback succeeded for profile '" .. profileName .. "'")
+	else
+		log("E", logTag, "CareerMP direct-start fallback failed for profile '" .. profileName .. "'")
+	end
+end
+
+local function onUpdate(dtReal, dtSim, dtRaw)
+	tryDirectCareerStart(dtReal)
+"""
+            if update_anchor_v3 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install CareerMP direct-start fallback; onUpdate missing"
+                )
+            enabler_text = enabler_text.replace(
+                update_anchor_v3, helper_v3, 1
+            )
+
+            leave_anchor_v3 = """	syncFallbackLevel = nil
+end
+"""
+            leave_replacement_v3 = """	syncFallbackLevel = nil
+	directStartProfileKey = nil
+	directStartElapsed = 0
+	directStartAttempted = false
+end
+"""
+            if leave_anchor_v3 in enabler_text:
+                enabler_text = enabler_text.replace(
+                    leave_anchor_v3, leave_replacement_v3, 1
+                )
+
+            print("  - CareerMP 0.39 direct profile-start fallback v3 installed")
+
+        if direct_start_marker not in enabler_text:
+            raise RuntimeError(
+                "CareerMP direct profile-start fallback v3 marker missing after patch"
+            )
+
         entries[enabler_path] = enabler_text.encode("utf-8")
         if "CareerMP watchdog world-ready checkpoint" not in enabler_text:
             world_ready_pattern = re.compile(
@@ -853,6 +994,7 @@ end
     print("  - careerPatches.lua current RLS runtime guards verified")
     print("  - careerPatches.lua installs RLS guards continuously/idempotently")
     print("  - careerMPEnabler.lua has MP-only stable-level sync fallback (15s)")
+    print("  - careerMPEnabler.lua can direct-start a stable selected profile after 5s")
 
 
 def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
