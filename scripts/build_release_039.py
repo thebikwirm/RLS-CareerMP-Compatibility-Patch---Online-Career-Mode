@@ -1714,6 +1714,34 @@ end
         print("  - BeamMP legacy logo URL already absent/patched")
 
 
+def patch_rls_phone_039(archive: Path, zip_engine: str) -> tuple[int, str]:
+    """Guard RLS's removed 0.39 taxi API when toggling the phone.
+
+    Patch the rebuilt archive, not a guessed standalone phone implementation.
+    Preserve the upstream module and all remaining phone behaviour.
+    """
+    entries = read_zip_entries(archive)
+    path = "lua/ge/extensions/gameplay/phone.lua"
+    payload = entries.get(path)
+    if payload is None:
+        print("WARNING: RLS phone.lua absent from rebuilt archive; phone guard skipped")
+        return archive.stat().st_size, sha256sum(archive)
+
+    source = payload.decode("utf-8")
+    legacy = "gameplay_taxi.isTaxiJobActive()"
+    guarded = "(gameplay_taxi and type(gameplay_taxi.isTaxiJobActive) == 'function' and gameplay_taxi.isTaxiJobActive() or false)"
+    if legacy in source:
+        source = source.replace(legacy, guarded)
+        entries[path] = source.encode("utf-8")
+        write_zip(archive, entries, engine=zip_engine)
+        print("Patched RLS phone: missing BeamNG 0.39 taxi API no longer causes fatal toggle error")
+    elif guarded in source:
+        print("RLS phone taxi API guard already installed")
+    else:
+        print("WARNING: RLS phone taxi API call not found; inspect upstream phone implementation")
+    return archive.stat().st_size, sha256sum(archive)
+
+
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
 
@@ -1840,6 +1868,8 @@ def main() -> int:
             apply_legacy_online_save_timing=False,
             apply_legacy_override_manager_patch=False,
         )
+
+        rls_size, rls_hash = patch_rls_phone_039(rls_out, args.zip_engine)
 
         # Clean up filenames created by older versions of this builder.
         for stale_rls in out_dir.glob(
