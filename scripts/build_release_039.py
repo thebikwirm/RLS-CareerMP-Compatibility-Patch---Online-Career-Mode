@@ -1696,6 +1696,29 @@ if (typeof window !== 'undefined' && !window.__careerMP39RouteDiagnostics) {
 }
 """
         print("  - installed observational CEF diagnostics in BeamMP Vue mod (180s)")
+    # The BeamMP client is mounted before key bindings are parsed; the RLS
+    # server-delivered ZIP is not. Ship the original RLS action with the
+    # launcher-side client package so saved openPhone bindings resolve early.
+    phone_action_path = "lua/ge/extensions/core/input/actions/phone.json"
+    if phone_action_path not in entries:
+        entries[phone_action_path] = (
+            '{\\n  "openPhone": {\\n    "cat": "gameplay",\\n'
+            '    "order": 257,\\n    "ctx": "tlua",\\n'
+            '    "onDown": "if not gameplay_phone then extensions.load(\\\'gameplay_phone\\\') end if gameplay_phone then gameplay_phone.togglePhone() end",\\n'
+            '    "title": "Toggle Phone",\\n    "desc": "Toggle Phone"\\n  }\\n}\\n'
+        ).encode("utf-8")
+        print("  - installed early RLS openPhone input action in BeamMP client")
+    else:
+        print("  - openPhone action already present in BeamMP client")
+
+    # CEF logs stringify objects as [object Object] when passed separately.
+    # Keep the diagnostic useful in both successful and failed 0.39 handoffs.
+    old_emit = "console.warn('[CareerMP route diag] ' + stamp() + ' ' + name, details);"
+    new_emit = "console.warn('[CareerMP route diag] ' + stamp() + ' ' + name + ' ' + JSON.stringify(details));"
+    if old_emit in index_text:
+        index_text = index_text.replace(old_emit, new_emit)
+    index_text = index_text.replace("if (++checks >= 180) clearInterval(timer);",
+                                    "if (++checks >= 420) clearInterval(timer);")
     entries[index_path] = index_text.encode("utf-8")
 
     packaged_logo = "/ui/ui-vue/mods/BeamMP/icons/account-multiple.svg"
