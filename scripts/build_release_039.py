@@ -1634,6 +1634,43 @@ end
         raise RuntimeError(
             "BeamMP native play-route ownership marker missing after patch"
         )
+    # Experimental 5-second UI reload debounce. Run in the existing update
+    # callback rather than scheduling an asynchronous Lua timer that might be
+    # dropped during the session mod reload.
+    reload_marker = "CareerMP39 delayed BeamMP UI reload"
+    if reload_marker not in core_network_text:
+        update_anchor = "local function onUpdate(dt)\n"
+        extension_anchor = "local function onExtensionLoaded()\n\tconnectToLauncher(true)\n\treloadUI() -- required to show modified mainmenu\nend"
+        if update_anchor not in core_network_text or extension_anchor not in core_network_text:
+            raise RuntimeError("BeamMP UI reload anchors changed; refusing delay patch")
+        core_network_text = core_network_text.replace(
+            update_anchor,
+            "local careerMP39ReloadDelay = nil -- CareerMP39 delayed BeamMP UI reload\n"
+            + update_anchor
+            + "\tif careerMP39ReloadDelay then\n"
+            + "\t\tcareerMP39ReloadDelay = careerMP39ReloadDelay - (dt or 0)\n"
+            + "\t\tif careerMP39ReloadDelay <= 0 then\n"
+            + "\t\t\tcareerMP39ReloadDelay = nil\n"
+            + "\t\t\tif not isMpSession and not isGoingMpSession then\n"
+            + "\t\t\t\tlog('I', 'CareerMP39', 'performing deferred BeamMP menu UI reload')\n"
+            + "\t\t\t\treloadUI()\n"
+            + "\t\t\telse\n"
+            + "\t\t\t\tlog('I', 'CareerMP39', 'skipped deferred menu reload during MP session')\n"
+            + "\t\t\tend\n"
+            + "\t\tend\n"
+            + "\tend\n",
+            1,
+        )
+        core_network_text = core_network_text.replace(
+            extension_anchor,
+            "local function onExtensionLoaded()\n"
+            + "\tconnectToLauncher(true)\n"
+            + "\tcareerMP39ReloadDelay = 5.0\n"
+            + "\tlog('I', 'CareerMP39', 'deferred BeamMP menu UI reload by 5s')\n"
+            + "end",
+            1,
+        )
+        print("  - debounce BeamMP menu UI reload by 5s and skip during active joining")
     entries[core_network_path] = core_network_text.encode("utf-8")
 
     route_marker = "BeamNG 0.39 direct child-route handoff"
