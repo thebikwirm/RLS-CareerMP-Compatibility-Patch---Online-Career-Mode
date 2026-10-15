@@ -1761,30 +1761,32 @@ if (typeof window !== 'undefined' && !window.__careerMP39RouteDiagnostics) {
 
 
 def patch_rls_phone_039(archive: Path, zip_engine: str) -> tuple[int, str]:
-    """Guard RLS's removed 0.39 taxi API when toggling the phone.
-
-    Patch the rebuilt archive, not a guessed standalone phone implementation.
-    Preserve the upstream module and all remaining phone behaviour.
-    """
+    """Apply narrow BeamNG 0.39 RLS taxi API guards, preserving other logic."""
     entries = read_zip_entries(archive)
-    path = "lua/ge/extensions/gameplay/phone.lua"
-    payload = entries.get(path)
-    if payload is None:
-        print("WARNING: RLS phone.lua absent from rebuilt archive; phone guard skipped")
-        return archive.stat().st_size, sha256sum(archive)
-
-    source = payload.decode("utf-8")
     legacy = "gameplay_taxi.isTaxiJobActive()"
     guarded = "(gameplay_taxi and type(gameplay_taxi.isTaxiJobActive) == 'function' and gameplay_taxi.isTaxiJobActive() or false)"
-    if legacy in source:
-        source = source.replace(legacy, guarded)
-        entries[path] = source.encode("utf-8")
+    changed = False
+    for path in (
+        "lua/ge/extensions/gameplay/phone.lua",
+        "lua/ge/extensions/career/modules/rlsRentals.lua",
+    ):
+        payload = entries.get(path)
+        if payload is None:
+            print(f"WARNING: RLS compatibility source missing: {path}")
+            continue
+        source = payload.decode("utf-8")
+        if legacy in source:
+            source = source.replace(legacy, guarded)
+            entries[path] = source.encode("utf-8")
+            changed = True
+            print(f"  - guarded removed taxi API in {path}")
+        elif guarded in source:
+            print(f"  - taxi guard already installed in {path}")
+        else:
+            print(f"WARNING: No expected taxi API call in {path}; inspect upstream")
+
+    if changed:
         write_zip(archive, entries, engine=zip_engine)
-        print("Patched RLS phone: missing BeamNG 0.39 taxi API no longer causes fatal toggle error")
-    elif guarded in source:
-        print("RLS phone taxi API guard already installed")
-    else:
-        print("WARNING: RLS phone taxi API call not found; inspect upstream phone implementation")
     return archive.stat().st_size, sha256sum(archive)
 
 
