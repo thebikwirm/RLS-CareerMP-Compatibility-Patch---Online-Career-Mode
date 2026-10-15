@@ -46,6 +46,12 @@ local shutdownLeaves = {
     "career_modules_sleep",
     "career_modules_stamina",
     "career_modules_switchMap",
+    "career_modules_vehicleShopping",
+    "career_modules_insurance_repairScreen",
+    "career_modules_insurance_insurance",
+    "career_modules_maintenanceComputer",
+    "career_modules_delivery_parcelManager",
+    "career_modules_delivery_generator",
 }
 
 local phases = {
