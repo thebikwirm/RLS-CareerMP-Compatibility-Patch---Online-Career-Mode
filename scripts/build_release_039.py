@@ -1461,6 +1461,52 @@ def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
         )
 
     index_text = index_payload.decode("utf-8").replace("\r\n", "\n")
+
+    # BeamNG 0.39 already resolves the world-ready gameplay state itself.
+    # BeamMP's additional ui_router.navigate("play") races the native router and
+    # consistently times out with route_change_not_accepted. Remove only that
+    # redundant transition; pause-menu resume navigation remains untouched.
+    core_network_path = "lua/ge/extensions/MPCoreNetwork.lua"
+    core_network_payload = entries.get(core_network_path)
+    if not core_network_payload:
+        raise RuntimeError(
+            f"BeamMP input missing {core_network_path}; unsupported BeamMP core layout"
+        )
+
+    core_network_text = core_network_payload.decode("utf-8").replace("\r\n", "\n")
+    world_ready_marker = "BeamNG 0.39 native play-route ownership"
+    if world_ready_marker not in core_network_text:
+        old_world_ready = '''local function onWorldReadyState(readyState)
+\tif readyState == 2 and isMpSession and not isGoingMpSession and extensions.ui_router then
+\t\textensions.ui_router.navigate("play")
+\tend
+end
+'''
+        new_world_ready = '''local function onWorldReadyState(readyState)
+\t-- BeamNG 0.39 native play-route ownership
+\t-- core_gamestate/BeamNG's router already completes the world-ready handoff.
+\t-- Calling ui_router.navigate("play") here creates a duplicate transition that
+\t-- is rejected by the 0.39 router while the native handoff is still settling.
+\tif readyState == 2 and isMpSession and not isGoingMpSession then
+\t\tlog('D', 'onWorldReadyState', 'BeamNG 0.39 native play route retained; duplicate BeamMP navigation skipped')
+\tend
+end
+'''
+        if old_world_ready not in core_network_text:
+            raise RuntimeError(
+                "Unable to patch BeamMP world-ready play navigation; "
+                "MPCoreNetwork.lua layout changed"
+            )
+        core_network_text = core_network_text.replace(
+            old_world_ready, new_world_ready, 1
+        )
+
+    if world_ready_marker not in core_network_text:
+        raise RuntimeError(
+            "BeamMP native play-route ownership marker missing after patch"
+        )
+    entries[core_network_path] = core_network_text.encode("utf-8")
+
     route_marker = "BeamNG 0.39 direct child-route handoff"
     if route_marker not in index_text:
         old_action = "    action: BEAMMP_ROUTE_NAME,\n"
@@ -1528,7 +1574,8 @@ def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
             + ", ".join(sorted(remaining))
         )
 
-    print("Patched BeamMP for BeamNG 0.39 UI:")
+    print("Patched BeamMP for BeamNG 0.39 UI/core:")
+    print("  - skips redundant BeamMP world-ready play navigation")
     print("  - main-menu action targets concrete menu.beammp.launcher child route")
     print("  - redirecting menu.beammp parent is no longer the initial Lua handoff target")
     if patched_logo_files:
