@@ -1472,6 +1472,44 @@ end
                 "CareerMP BeamMP world-ready runtime guard v8 marker missing after patch"
             )
 
+        # V9: observe native Lua requests for the remaining 'play' handoff.
+        # This is diagnostic only: do not change route ownership or timing.
+        play_trace_marker = "CareerMP 0.39 native play-route trace v9"
+        if play_trace_marker not in enabler_text:
+            trace_anchor = "local function ensureBeamMPWorldReadyGuard()\\n"
+            trace_replacement = r'''-- CareerMP 0.39 native play-route trace v9
+local function ensureNativePlayRouteTrace()
+    local router = ui_router or (extensions and extensions["ui_router"])
+    if type(router) ~= "table" or type(router.navigate) ~= "function" then
+        return false
+    end
+    if router.__careerMP39PlayRouteTrace then return true end
+
+    local originalNavigate = router.navigate
+    router.navigate = function(route, ...)
+        local routeName = type(route) == "table" and
+            tostring(route.name or route.route or route.id) or tostring(route)
+        if routeName == "play" then
+            local active = career_career and career_career.isActive and career_career.isActive()
+            log("I", logTag, "native Lua play route requested; worldReadyState=" ..
+                tostring(worldReadyState) .. " careerActive=" .. tostring(active))
+        end
+        return originalNavigate(route, ...)
+    end
+    router.__careerMP39PlayRouteTrace = true
+    log("I", logTag, "native Lua play-route trace installed")
+    return true
+end
+
+local function ensureBeamMPWorldReadyGuard()
+    ensureNativePlayRouteTrace()
+'''
+            if trace_anchor not in enabler_text:
+                raise RuntimeError("Unable to install native play-route tracing; world-ready guard missing")
+            enabler_text = enabler_text.replace(trace_anchor, trace_replacement, 1)
+        if play_trace_marker not in enabler_text:
+            raise RuntimeError("CareerMP play-route tracing marker missing after patch")
+
         # Repair CareerMP.zip files produced by the first V5 builder. Because
         # built-039/CareerMP.zip can be both the source and output, a subsequent
         # build may ingest an already-patched enabler containing the old literal
