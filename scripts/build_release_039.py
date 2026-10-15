@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 from pathlib import Path
@@ -1701,12 +1702,16 @@ if (typeof window !== 'undefined' && !window.__careerMP39RouteDiagnostics) {
     # launcher-side client package so saved openPhone bindings resolve early.
     phone_action_path = "lua/ge/extensions/core/input/actions/phone.json"
     if phone_action_path not in entries:
-        entries[phone_action_path] = (
-            '{\\n  "openPhone": {\\n    "cat": "gameplay",\\n'
-            '    "order": 257,\\n    "ctx": "tlua",\\n'
-            '    "onDown": "if not gameplay_phone then extensions.load(\\\'gameplay_phone\\\') end if gameplay_phone then gameplay_phone.togglePhone() end",\\n'
-            '    "title": "Toggle Phone",\\n    "desc": "Toggle Phone"\\n  }\\n}\\n'
-        ).encode("utf-8")
+        entries[phone_action_path] = json.dumps({
+            "openPhone": {
+                "cat": "gameplay",
+                "order": 257,
+                "ctx": "tlua",
+                "onDown": "if not gameplay_phone then extensions.load('gameplay_phone') end if gameplay_phone then gameplay_phone.togglePhone() end",
+                "title": "Toggle Phone",
+                "desc": "Toggle Phone",
+            }
+        }, indent=2).encode("utf-8")
         print("  - installed early RLS openPhone input action in BeamMP client")
     else:
         print("  - openPhone action already present in BeamMP client")
