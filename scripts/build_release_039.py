@@ -1476,7 +1476,7 @@ end
         # This is diagnostic only: do not change route ownership or timing.
         play_trace_marker = "CareerMP 0.39 native play-route trace v9"
         if play_trace_marker not in enabler_text:
-            trace_anchor = "local function ensureBeamMPWorldReadyGuard()\\n"
+            trace_anchor = "local function ensureBeamMPWorldReadyGuard()" + chr(10)
             trace_replacement = r'''-- CareerMP 0.39 native play-route trace v9
 local function ensureNativePlayRouteTrace()
     local router = ui_router or (extensions and extensions["ui_router"])
