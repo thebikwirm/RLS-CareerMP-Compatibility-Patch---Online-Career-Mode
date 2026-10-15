@@ -225,12 +225,31 @@ local function runBulkManualLoad()
     return true
 end
 
+-- Diagnostics for the two business dependencies still reported by BeamNG
+-- during shutdown. Do not try to load a missing foundation while tearing down.
+local shutdownDependencies = {
+    career_modules_business_businessComputer = "career_modules_business_businessHelpers",
+    career_modules_vehicleShopping = "career_modules_business_businessInventory",
+}
+
 local function requestUnload(name)
     if not name or not extensions or type(extensions.unload) ~= "function" then return end
     if not isLoaded(name) then return end
+
+    local dependency = shutdownDependencies[name]
+    if dependency then
+        log("I", logTag, string.format(
+            "shutdown consumer %s: dependency %s loaded=%s",
+            name, dependency, tostring(isLoaded(dependency))))
+    end
+
     local ok, err = pcall(extensions.unload, name)
     if not ok then
         log("W", logTag, "unload failed for " .. tostring(name) .. ": " .. tostring(err))
+    elseif dependency then
+        log("I", logTag, string.format(
+            "shutdown consumer %s: loaded after request=%s; dependency loaded=%s",
+            name, tostring(isLoaded(name)), tostring(isLoaded(dependency))))
     end
 end
 
