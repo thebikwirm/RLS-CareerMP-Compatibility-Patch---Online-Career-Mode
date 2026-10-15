@@ -1383,6 +1383,95 @@ local pendingCareerAttempt = 0
                 "CareerMP first activation settle v7 marker missing after patch"
             )
 
+        # V8: patch BeamMP's exported world-ready callback at runtime instead of
+        # relying on a modified BeamMP.zip. The launcher may replace BeamMP.zip
+        # before startup, but CareerMP is server-distributed and can wrap the
+        # live MPCoreNetwork extension after BeamMP has loaded.
+        beammp_runtime_marker = "CareerMP 0.39 BeamMP world-ready runtime guard v8"
+        if beammp_runtime_marker not in enabler_text:
+            state_anchor_v8 = """local careerStartInProgress = false
+"""
+            state_replacement_v8 = """local careerStartInProgress = false
+
+-- CareerMP 0.39 BeamMP world-ready runtime guard v8
+local beamMPWorldReadyWrapper = nil
+local beamMPWorldReadyOriginal = nil
+
+local function ensureBeamMPWorldReadyGuard()
+	local mp = MPCoreNetwork or (extensions and extensions["MPCoreNetwork"])
+	if not (mp and type(mp.onWorldReadyState) == "function") then
+		return false
+	end
+
+	if beamMPWorldReadyWrapper and mp.onWorldReadyState == beamMPWorldReadyWrapper then
+		return true
+	end
+
+	beamMPWorldReadyOriginal = mp.onWorldReadyState
+	beamMPWorldReadyWrapper = function(readyState, ...)
+		local inMPSession = mp.isMPSession and mp.isMPSession()
+		if readyState == 2 and inMPSession then
+			log("D", logTag,
+				"suppressed redundant BeamMP world-ready play navigation")
+			return
+		end
+		return beamMPWorldReadyOriginal(readyState, ...)
+	end
+
+	mp.onWorldReadyState = beamMPWorldReadyWrapper
+	log("I", logTag, "installed BeamMP world-ready runtime guard")
+	return true
+end
+"""
+            if state_anchor_v8 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install BeamMP world-ready runtime guard state; "
+                    "V5 state layout changed"
+                )
+            enabler_text = enabler_text.replace(
+                state_anchor_v8, state_replacement_v8, 1
+            )
+
+            worker_anchor_v8 = """			for workerAttempt = 1, 36 do
+				if careerMPActive then
+"""
+            worker_replacement_v8 = """			for workerAttempt = 1, 36 do
+				ensureBeamMPWorldReadyGuard()
+				if careerMPActive then
+"""
+            if worker_anchor_v8 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to wire BeamMP world-ready runtime guard into jobsystem worker"
+                )
+            enabler_text = enabler_text.replace(
+                worker_anchor_v8, worker_replacement_v8, 1
+            )
+
+            extension_anchor_v8 = """	AddEventHandler("rxTrafficSignalTimer", rxTrafficSignalTimer)
+
+	-- CareerMP 0.39 jobsystem handshake fallback v6
+"""
+            extension_replacement_v8 = """	AddEventHandler("rxTrafficSignalTimer", rxTrafficSignalTimer)
+
+	ensureBeamMPWorldReadyGuard()
+
+	-- CareerMP 0.39 jobsystem handshake fallback v6
+"""
+            if extension_anchor_v8 not in enabler_text:
+                raise RuntimeError(
+                    "Unable to install BeamMP world-ready runtime guard in onExtensionLoaded"
+                )
+            enabler_text = enabler_text.replace(
+                extension_anchor_v8, extension_replacement_v8, 1
+            )
+
+            print("  - CareerMP 0.39 BeamMP world-ready runtime guard v8 installed")
+
+        if beammp_runtime_marker not in enabler_text:
+            raise RuntimeError(
+                "CareerMP BeamMP world-ready runtime guard v8 marker missing after patch"
+            )
+
         # Repair CareerMP.zip files produced by the first V5 builder. Because
         # built-039/CareerMP.zip can be both the source and output, a subsequent
         # build may ingest an already-patched enabler containing the old literal
@@ -1435,6 +1524,7 @@ local pendingCareerAttempt = 0
     print("  - careerMPEnabler.lua queues/retries career activation until isActive() is true")
     print("  - careerMPEnabler.lua starts a jobsystem handshake/activation worker")
     print("  - careerMPEnabler.lua delays the first activation attempt to avoid BeamMP play-route collision")
+    print("  - careerMPEnabler.lua runtime-wraps BeamMP world-ready navigation so launcher rewrites cannot restore it")
 
 
 def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
