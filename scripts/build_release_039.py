@@ -1785,6 +1785,30 @@ def patch_rls_phone_039(archive: Path, zip_engine: str) -> tuple[int, str]:
         else:
             print(f"WARNING: No expected taxi API call in {path}; inspect upstream")
 
+    # On 0.39 career can run without the old linear tutorial extension.
+    # Missing tutorial flags should not block opening the RLS computer menu.
+    tutorial_path = "lua/ge/extensions/overrides/career/modules/computer.lua"
+    payload = entries.get(tutorial_path)
+    if payload is not None:
+        source = payload.decode("utf-8")
+        old = 'if not career_modules_linearTutorial.getTutorialFlag("partShoppingComplete") then'
+        new = ('if career_modules_linearTutorial and '
+               'type(career_modules_linearTutorial.getTutorialFlag) == "function" '
+               'and not career_modules_linearTutorial.getTutorialFlag("partShoppingComplete") then')
+        old2 = 'elseif not career_modules_linearTutorial.getTutorialFlag("tuningComplete") then'
+        new2 = ('elseif career_modules_linearTutorial and '
+                'type(career_modules_linearTutorial.getTutorialFlag) == "function" '
+                'and not career_modules_linearTutorial.getTutorialFlag("tuningComplete") then')
+        if old in source and old2 in source:
+            source = source.replace(old, new).replace(old2, new2)
+            entries[tutorial_path] = source.encode("utf-8")
+            changed = True
+            print("  - guarded optional linear tutorial in RLS computer menu")
+        elif new in source and new2 in source:
+            print("  - RLS computer tutorial guards already present")
+        else:
+            print("WARNING: RLS computer tutorial call pattern differs; review source")
+
     if changed:
         write_zip(archive, entries, engine=zip_engine)
     return archive.stat().st_size, sha256sum(archive)
