@@ -24,12 +24,16 @@ local shutdownLeaves = {
     "career_modules_business_businessPartInventory",
     "career_modules_business_tuningShop",
     "career_modules_business_racingTeam",
-    "career_modules_business_businessHelpers",
+
+    -- Consumers must unload before the business foundations they reference.
+    "career_modules_vehicleShopping",
     "career_modules_business_businessComputer",
     "career_modules_business_businessSkillTree",
     "career_modules_business_businessTabRegistry",
+    "career_modules_business_businessHelpers",
     "career_modules_business_businessInventory",
     "career_modules_business_businessManager",
+
     "career_modules_usedCarAuctionNpcs",
     "career_modules_usedCarAuctionLots",
     "career_modules_usedCarAuction",
@@ -46,7 +50,6 @@ local shutdownLeaves = {
     "career_modules_sleep",
     "career_modules_stamina",
     "career_modules_switchMap",
-    "career_modules_vehicleShopping",
     "career_modules_insurance_repairScreen",
     "career_modules_insurance_insurance",
     "career_modules_maintenanceComputer",
