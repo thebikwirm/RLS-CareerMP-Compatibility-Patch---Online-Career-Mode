@@ -1650,6 +1650,52 @@ end
                 )
         else:
             index_text = index_text.replace(old_action, new_action, 1)
+    # Diagnostic-only CEF visibility. The UI router lives in BeamNG's base
+    # game, so this does not pretend to monkeypatch inaccessible Vue internals.
+    # Install observers on the BeamMP Vue mod, without modifying navigation.
+    cef_marker = "CareerMP CEF route diagnostics v10"
+    if cef_marker not in index_text:
+        index_text += r"""
+
+// CareerMP CEF route diagnostics v10
+// Console messages should be forwarded into BeamNG's CEF log where supported.
+if (typeof window !== 'undefined' && !window.__careerMP39RouteDiagnostics) {
+  window.__careerMP39RouteDiagnostics = true;
+  const stamp = () => new Date().toISOString();
+  const emit = (name, details) => {
+    try { console.warn('[CareerMP route diag] ' + stamp() + ' ' + name, details); }
+    catch (_) { /* diagnostic-only */ }
+  };
+  const snapshot = () => ({
+    hash: window.location.hash,
+    pathname: window.location.pathname,
+    runtimeDone: window.bngRuntimeStats?.done,
+    runtimePresent: !!window.bngRuntimeStats,
+    uiState: window.bngVue?.state?.name ?? null
+  });
+  emit('installed', snapshot());
+  window.addEventListener('hashchange', () => emit('hashchange', snapshot()));
+  window.addEventListener('popstate', () => emit('popstate', snapshot()));
+  window.addEventListener('error', e => emit('js-error', {
+    message: e.message, source: e.filename, line: e.lineno, column: e.colno,
+    stack: e.error?.stack
+  }));
+  window.addEventListener('unhandledrejection', e =>
+    emit('unhandled-promise-rejection', String(e.reason?.stack ?? e.reason)));
+  let last = '';
+  let checks = 0;
+  const timer = setInterval(() => {
+    const state = snapshot();
+    const signature = JSON.stringify(state);
+    if (signature !== last || checks % 10 === 0) {
+      emit('state', state);
+      last = signature;
+    }
+    if (++checks >= 180) clearInterval(timer);
+  }, 1000);
+}
+"""
+        print("  - installed observational CEF diagnostics in BeamMP Vue mod (180s)")
     entries[index_path] = index_text.encode("utf-8")
 
     packaged_logo = "/ui/ui-vue/mods/BeamMP/icons/account-multiple.svg"
