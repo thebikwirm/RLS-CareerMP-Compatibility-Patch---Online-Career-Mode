@@ -1918,6 +1918,69 @@ if (typeof window !== 'undefined' && !window.__careerMP39BootProbeV11) {
 }
 """
         print("  - installed passive CEF bootstrap/history probe (v11)")
+    # Earliest safe CEF hook: only inject into a *real* HTML entrypoint.
+    # Do not fabricate a replacement BeamNG HTML page or alter its boot order.
+    early_boot_marker = "CareerMP39 early HTML bootstrap probe v12"
+    early_boot_script = r"""
+<script>
+// CareerMP39 early HTML bootstrap probe v12
+(function () {
+  if (window.__careerMP39EarlyBootV12) return;
+  window.__careerMP39EarlyBootV12 = true;
+  var name = '[CareerMP39EarlyBoot] ';
+  function snap(event) {
+    var r = window.bngRuntimeStats;
+    var value = {
+      event: event,
+      at: Date.now(),
+      ms: Math.round(performance.now()),
+      url: location.href,
+      ready: document.readyState,
+      runtimePresent: !!r,
+      runtimeDone: r ? r.done : null,
+      vuePresent: !!window.bngVue
+    };
+    try { console.warn(name + JSON.stringify(value)); } catch (_) {}
+  }
+  snap('script-enter');
+  ['DOMContentLoaded', 'load', 'pageshow', 'pagehide', 'hashchange',
+   'unhandledrejection', 'error'].forEach(function (evt) {
+    window.addEventListener(evt, function (e) {
+      snap(evt);
+      if (evt === 'error') console.warn(name + String(e.message || e));
+      if (evt === 'unhandledrejection') console.warn(name + String(e.reason));
+    });
+  });
+  var count = 0;
+  var timer = setInterval(function () {
+    snap('bootstrap-tick');
+    if (++count >= 180) clearInterval(timer);
+  }, 1000);
+})();
+</script>
+"""
+    html_paths = [
+        name for name in entries
+        if name.lower() in ("ui/ui-vue/index.html", "ui/index.html")
+    ]
+    if html_paths:
+        for html_path in html_paths:
+            html_source = entries[html_path].decode("utf-8")
+            if early_boot_marker not in html_source:
+                if "<head" not in html_source.lower():
+                    raise RuntimeError(f"Cannot identify HTML head in {html_path}")
+                html_source, hits = re.subn(
+                    r"(?i)(<head\b[^>]*>)",
+                    lambda m: m.group(1) + "\n" + early_boot_script,
+                    html_source, count=1,
+                )
+                if hits != 1:
+                    raise RuntimeError(f"Cannot instrument CEF head in {html_path}")
+                entries[html_path] = html_source.encode("utf-8")
+                print(f"  - installed early CEF bootstrap probe into {html_path}")
+    else:
+        print("  - early CEF HTML entrypoint not in BeamMP ZIP; native lifecycle trace remains available")
+
     # The BeamMP client is mounted before key bindings are parsed; the RLS
     # server-delivered ZIP is not. Ship the original RLS action with the
     # launcher-side client package so saved openPhone bindings resolve early.
