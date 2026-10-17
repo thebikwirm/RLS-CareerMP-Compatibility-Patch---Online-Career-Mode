@@ -11,3 +11,4 @@ release/checksums-*.txt
 *.vs
 /build.bat
 /build.bat
+/.vs/slnx.sqlite
