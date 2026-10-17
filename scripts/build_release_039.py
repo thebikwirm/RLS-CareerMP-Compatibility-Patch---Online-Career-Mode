@@ -1733,8 +1733,29 @@ end
         "\\tend\\n"
     )
     core_network_text = core_network_text.replace(recovery_tick, "")
+    # Earlier callback restoration can leave the update-loop timer behind.
+    # Remove its complete top-level conditional regardless of indentation
+    # differences in regenerated ZIPs.
     if "careerMP39JoinUIRecovery" in core_network_text:
-        raise RuntimeError("Unable to remove experimental post-join UI recovery; use pristine source ZIP")
+        core_network_text = re.sub(
+            r"(?m)^\\tif careerMP39JoinUIRecovery then\\r?\\n"
+            r"(?:(?!^\\tend\\s*$)[\\s\\S])*^\\tend[ \\t]*\\r?\\n",
+            "", core_network_text, count=1,
+        )
+        core_network_text = re.sub(
+            r"(?m)^local careerMP39JoinUIRecovery[^\\n]*\\n", "",
+            core_network_text,
+        )
+        core_network_text = re.sub(
+            r"(?m)^local careerMP39JoinUIReloaded[^\\n]*\\n", "",
+            core_network_text,
+        )
+    if "careerMP39JoinUIRecovery" in core_network_text:
+        pos = core_network_text.index("careerMP39JoinUIRecovery")
+        raise RuntimeError(
+            "Post-join recovery cleanup still incomplete near: "
+            + repr(core_network_text[max(0, pos-180):pos+360])
+        )
     entries[core_network_path] = core_network_text.encode("utf-8")
 
     route_marker = "BeamNG 0.39 direct child-route handoff"
