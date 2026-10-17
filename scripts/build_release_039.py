@@ -1546,6 +1546,10 @@ local function ensureBeamMPWorldReadyGuard()
             '\\t\\t\\tlog("I", logTag, "delegating world-ready transition to BeamMP")\\n'
             '\\t\\tend'
         )
+        # Legacy patch strings above are stored as escaped Lua text in the
+        # Python builder. Decode them to actual tabs/newlines before matching.
+        old_suppression = old_suppression.encode("utf-8").decode("unicode_escape")
+        new_delegation = new_delegation.encode("utf-8").decode("unicode_escape")
         if old_suppression in enabler_text:
             enabler_text = enabler_text.replace(old_suppression, new_delegation, 1)
             print("  - repaired prepatched CareerMP world-ready suppression")
