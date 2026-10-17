@@ -1686,16 +1686,24 @@ end
         start = core_network_text.find(signature)
         if start < 0 or core_network_text.find(signature, start + 1) >= 0:
             raise RuntimeError("BeamMP world-ready callback not unique")
-        ending = core_network_text.find("\\nend\\n", start)
-        if ending < 0:
-            raise RuntimeError("BeamMP world-ready callback terminator missing")
-        callback = core_network_text[start:ending + len("\\nend\\n")]
+        # Match a top-level Lua 'end' even when followed by a comment, an
+        # empty line, or EOF. Previous exact '\\nend\\n' matching failed on
+        # reused client ZIPs with slightly different newline layouts.
+        terminator = re.search(r"(?m)^end[ \\t]*(?:--[^\\n]*)?(?:\\n|$)", core_network_text[start:])
+        if terminator is None:
+            excerpt = core_network_text[start:start + 1100]
+            raise RuntimeError(
+                "BeamMP world-ready callback terminator missing; "
+                "callback excerpt: " + repr(excerpt)
+            )
+        ending = start + terminator.end()
+        callback = core_network_text[start:ending]
         if "BeamNG 0.39 native play-route ownership" not in callback:
             raise RuntimeError("Existing BeamMP callback differs from expected patched form")
         core_network_text = (
             core_network_text[:start]
             + restored_world_ready
-            + core_network_text[ending + len("\\nend\\n"):]
+            + core_network_text[ending:]
         )
         print("  - restored BeamMP world-ready play navigation")
     # Remove the one-shot post-join reload experiment from reused ZIPs.
