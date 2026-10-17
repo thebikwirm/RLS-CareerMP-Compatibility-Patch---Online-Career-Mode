@@ -1673,10 +1673,10 @@ end
     # Switch back to BeamMP owning the world-ready gameplay transition.
     # This also repairs ZIPs previously generated with our suppression patch.
     restored_world_ready = (
-        'local function onWorldReadyState(readyState)\\n'
-        '\\tif readyState == 2 and isMpSession and not isGoingMpSession and extensions.ui_router then\\n'
-        '\\t\\textensions.ui_router.navigate("play")\\n'
-        '\\tend\\nend\\n'
+        'local function onWorldReadyState(readyState)\n'
+        '\tif readyState == 2 and isMpSession and not isGoingMpSession and extensions.ui_router then\n'
+        '\t\textensions.ui_router.navigate("play")\n'
+        '\tend\nend\n'
     )
     if "BeamNG 0.39 native play-route ownership" in core_network_text:
         # Locate the Lua callback by its signature and the next top-level
@@ -1766,6 +1766,10 @@ end
             "Post-join recovery cleanup still incomplete near: "
             + repr(core_network_text[max(0, pos-180):pos+360])
         )
+    # Guard against the historical builder bug that wrote literal \\n / \\t
+    # escape characters into Lua source instead of line breaks and tabs.
+    if "\\n" in core_network_text[core_network_text.index("local function onWorldReadyState(readyState)"):][:500]:
+        raise RuntimeError("Generated MPCoreNetwork.lua contains literal backslash-n escapes in world-ready callback")
     entries[core_network_path] = core_network_text.encode("utf-8")
 
     route_marker = "BeamNG 0.39 direct child-route handoff"
