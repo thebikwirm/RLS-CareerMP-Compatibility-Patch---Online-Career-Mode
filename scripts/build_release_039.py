@@ -1679,6 +1679,29 @@ def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
             + core_network_text[ending:]
         )
         print("  - restored BeamMP world-ready play navigation")
+    # Observational route tracing: record the precise native Lua request and
+    # its result without changing ownership, delays, or gameplay behaviour.
+    # Replace the callback as a whole, so reused ZIPs don't accumulate hooks.
+    route_trace_marker = "CareerMP39 route trace v11"
+    traced_callback = (
+        'local function onWorldReadyState(readyState)\n'
+        '\t-- CareerMP39 route trace v11\n'
+        '\tlog("I", "CareerMP39Route", "world-ready state=" .. tostring(readyState)'
+        ' .. " mp=" .. tostring(isMpSession) .. " goingMp=" .. tostring(isGoingMpSession)'
+        ' .. " router=" .. tostring(extensions and extensions.ui_router))\n'
+        '\tif readyState == 2 and isMpSession and not isGoingMpSession and extensions.ui_router then\n'
+        '\t\tlog("I", "CareerMP39Route", "requesting play from BeamMP onWorldReadyState")\n'
+        '\t\tlocal result = extensions.ui_router.navigate("play")\n'
+        '\t\tlog("I", "CareerMP39Route", "play navigate returned " .. tostring(result))\n'
+        '\tend\nend\n'
+    )
+    if route_trace_marker not in core_network_text:
+        if restored_world_ready not in core_network_text:
+            raise RuntimeError("Route trace cannot find original BeamMP callback")
+        core_network_text = core_network_text.replace(
+            restored_world_ready, traced_callback, 1
+        )
+        print("  - added observational BeamMP world-ready route trace")
     # Remove the one-shot post-join reload experiment from reused ZIPs.
     recovery_decl = ("local careerMP39JoinUIRecovery = nil -- CareerMP39 post-join UI recovery\n"
                      "local careerMP39JoinUIReloaded = false\n")
