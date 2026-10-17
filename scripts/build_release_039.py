@@ -1844,6 +1844,80 @@ if (typeof window !== 'undefined' && !window.__careerMP39RouteDiagnostics) {
 }
 """
         print("  - installed observational CEF diagnostics in BeamMP Vue mod (180s)")
+    # Passive CEF/bootstrap and history handoff probe. This lives in the
+    # BeamMP Vue entry point and is reinstalled on every fresh UI boot.
+    # It never forces navigation or reloads the UI.
+    cef_probe_marker = "CareerMP CEF bootstrap and handoff probe v11"
+    if cef_probe_marker not in index_text:
+        index_text += r"""
+
+// CareerMP CEF bootstrap and handoff probe v11
+if (typeof window !== 'undefined' && !window.__careerMP39BootProbeV11) {
+  window.__careerMP39BootProbeV11 = true;
+  (() => {
+    const tag = '[CareerMP39BootProbe] ';
+    const ts = () => new Date().toISOString();
+    const emit = (event, data = {}) => {
+      try { console.warn(tag + ts() + ' ' + event + ' ' + JSON.stringify(data)); }
+      catch (e) { console.warn(tag + event + ' serialization failed'); }
+    };
+    const snapshot = () => {
+      const runtime = window.bngRuntimeStats;
+      const vue = window.bngVue;
+      const perfNav = performance.getEntriesByType?.('navigation')?.[0];
+      return {
+        href: location.href,
+        hash: location.hash,
+        readyState: document.readyState,
+        visibility: document.visibilityState,
+        runtimePresent: !!runtime,
+        runtimeDone: runtime?.done ?? null,
+        runtimeType: typeof runtime,
+        vuePresent: !!vue,
+        vueState: vue?.state?.name ?? null,
+        navigationType: perfNav?.type ?? null,
+        navigationStart: perfNav?.startTime ?? null,
+        timeSinceNavigationMs: Math.round(performance.now())
+      };
+    };
+    emit('installed', snapshot());
+    ['DOMContentLoaded', 'load', 'pageshow', 'pagehide', 'hashchange',
+     'popstate', 'visibilitychange'].forEach(event => {
+      window.addEventListener(event, () => emit(event, snapshot()));
+    });
+    ['pushState', 'replaceState'].forEach(method => {
+      const original = history[method];
+      if (typeof original !== 'function') return;
+      history[method] = function(...args) {
+        emit('history-' + method + '-before', {
+          from: location.href, to: String(args[2] ?? ''), ...snapshot()
+        });
+        const result = original.apply(this, args);
+        emit('history-' + method + '-after', snapshot());
+        return result;
+      };
+    });
+    let prev = '';
+    let tick = 0;
+    const interval = setInterval(() => {
+      const state = snapshot();
+      const signature = JSON.stringify({
+        href: state.href, readyState: state.readyState,
+        runtimePresent: state.runtimePresent, runtimeDone: state.runtimeDone,
+        vuePresent: state.vuePresent, vueState: state.vueState,
+        visibility: state.visibility
+      });
+      if (signature !== prev || tick % 15 === 0) {
+        emit('heartbeat', state);
+        prev = signature;
+      }
+      tick += 1;
+      if (tick >= 600) clearInterval(interval);
+    }, 1000);
+  })();
+}
+"""
+        print("  - installed passive CEF bootstrap/history probe (v11)")
     # The BeamMP client is mounted before key bindings are parsed; the RLS
     # server-delivered ZIP is not. Ship the original RLS action with the
     # launcher-side client package so saved openPhone bindings resolve early.
