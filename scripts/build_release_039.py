@@ -1707,42 +1707,42 @@ end
         )
         print("  - restored BeamMP world-ready play navigation")
     # Remove the one-shot post-join reload experiment from reused ZIPs.
-    recovery_decl = ("local careerMP39JoinUIRecovery = nil -- CareerMP39 post-join UI recovery\\n"
-                     "local careerMP39JoinUIReloaded = false\\n")
+    recovery_decl = ("local careerMP39JoinUIRecovery = nil -- CareerMP39 post-join UI recovery\n"
+                     "local careerMP39JoinUIReloaded = false\n")
     core_network_text = core_network_text.replace(recovery_decl, "")
     recovery_arm = (
-        "\\t\\tif not careerMP39JoinUIReloaded then\\n"
-        "\\t\\t\\tcareerMP39JoinUIRecovery = 3.0\\n"
-        "\\t\\t\\tcareerMP39JoinUIReloaded = true\\n"
-        "\\t\\t\\tlog('I', 'CareerMP39', 'scheduled one-shot post-join UI reload')\\n"
-        "\\t\\tend"
+        "\t\tif not careerMP39JoinUIReloaded then\n"
+        "\t\t\tcareerMP39JoinUIRecovery = 3.0\n"
+        "\t\t\tcareerMP39JoinUIReloaded = true\n"
+        "\t\t\tlog('I', 'CareerMP39', 'scheduled one-shot post-join UI reload')\n"
+        "\t\tend"
     )
     core_network_text = core_network_text.replace(recovery_arm, "")
     recovery_tick = (
-        "\\tif careerMP39JoinUIRecovery then\\n"
-        "\\t\\tcareerMP39JoinUIRecovery = careerMP39JoinUIRecovery - (dt or 0)\\n"
-        "\\t\\tif careerMP39JoinUIRecovery <= 0 then\\n"
-        "\\t\\t\\tcareerMP39JoinUIRecovery = nil\\n"
-        "\\t\\t\\tif isMpSession and worldReadyState == 2 then\\n"
-        "\\t\\t\\t\\tlog('I', 'CareerMP39', 'performing one-shot post-join UI reload')\\n"
-        "\\t\\t\\t\\treloadUI()\\n"
-        "\\t\\t\\telse\\n"
-        "\\t\\t\\t\\tlog('I', 'CareerMP39', 'skipped post-join UI reload: session not ready')\\n"
-        "\\t\\t\\tend\\n"
-        "\\t\\tend\\n"
-        "\\tend\\n"
+        "\tif careerMP39JoinUIRecovery then\n"
+        "\t\tcareerMP39JoinUIRecovery = careerMP39JoinUIRecovery - (dt or 0)\n"
+        "\t\tif careerMP39JoinUIRecovery <= 0 then\n"
+        "\t\t\tcareerMP39JoinUIRecovery = nil\n"
+        "\t\t\tif isMpSession and worldReadyState == 2 then\n"
+        "\t\t\t\tlog('I', 'CareerMP39', 'performing one-shot post-join UI reload')\n"
+        "\t\t\t\treloadUI()\n"
+        "\t\t\telse\n"
+        "\t\t\t\tlog('I', 'CareerMP39', 'skipped post-join UI reload: session not ready')\n"
+        "\t\t\tend\n"
+        "\t\tend\n"
+        "\tend\n"
     )
     core_network_text = core_network_text.replace(recovery_tick, "")
     # On reused ZIPs, remove the complete timer by its outermost Lua 'end'.
     # Do not use \\s in an end-of-line regex: it also matches newlines and
     # can skip nested blocks, leaving a partial timer behind.
-    timer_anchor = "\\tif careerMP39JoinUIRecovery then\\n"
+    timer_anchor = "\tif careerMP39JoinUIRecovery then\n"
     if timer_anchor in core_network_text:
         timer_start = core_network_text.index(timer_anchor)
         # Nested 'end' lines have two or more tabs; exactly one tab denotes
         # the injected outer conditional. Keep the following onUpdate code.
         timer_end_match = re.search(
-            r"(?m)^\\tend[ \\t]*(?:\\r?\\n|$)",
+            r"(?m)^\tend[ \t]*(?:\r?\n|$)",
             core_network_text[timer_start:],
         )
         if timer_end_match is None:
@@ -1755,10 +1755,10 @@ end
         core_network_text = core_network_text[:timer_start] + core_network_text[timer_end:]
         print("  - removed leftover post-join UI timer from onUpdate")
     core_network_text = re.sub(
-        r"(?m)^local careerMP39JoinUIRecovery[^\\n]*\\n", "", core_network_text,
+        r"(?m)^local careerMP39JoinUIRecovery[^\n]*\n", "", core_network_text,
     )
     core_network_text = re.sub(
-        r"(?m)^local careerMP39JoinUIReloaded[^\\n]*\\n", "", core_network_text,
+        r"(?m)^local careerMP39JoinUIReloaded[^\n]*\n", "", core_network_text,
     )
     if "careerMP39JoinUIRecovery" in core_network_text:
         pos = core_network_text.index("careerMP39JoinUIRecovery")
