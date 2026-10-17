@@ -1532,6 +1532,25 @@ local function ensureBeamMPWorldReadyGuard()
                 "CareerMP V5 traceback log string verification failed"
             )
 
+        # Repair previously patched CareerMP.zip inputs: V8 marker may exist
+        # while the old suppressing wrapper is still embedded.
+        old_suppression = (
+            '\\t\\tif readyState == 2 and inMPSession then\\n'
+            '\\t\\t\\tlog("D", logTag,\\n'
+            '\\t\\t\\t\\t"suppressed redundant BeamMP world-ready play navigation")\\n'
+            '\\t\\t\\treturn\\n'
+            '\\t\\tend'
+        )
+        new_delegation = (
+            '\\t\\tif readyState == 2 and inMPSession then\\n'
+            '\\t\\t\\tlog("I", logTag, "delegating world-ready transition to BeamMP")\\n'
+            '\\t\\tend'
+        )
+        if old_suppression in enabler_text:
+            enabler_text = enabler_text.replace(old_suppression, new_delegation, 1)
+            print("  - repaired prepatched CareerMP world-ready suppression")
+        if "suppressed redundant BeamMP world-ready play navigation" in enabler_text:
+            raise RuntimeError("Stale CareerMP world-ready suppression remains")
         entries[enabler_path] = enabler_text.encode("utf-8")
         if "CareerMP watchdog world-ready checkpoint" not in enabler_text:
             world_ready_pattern = re.compile(
@@ -1659,7 +1678,7 @@ end
         import re as _re
         pattern = (r'local function onWorldReadyState\\(readyState\\)\\n'
                    r'\\t-- BeamNG 0\\.39 native play-route ownership.*?\\nend\\n')
-        core_network_text, restored_count = _re.subn(pattern, restored_world_ready, core_network_text, count=1, flags=_re.S)
+        core_network_text, restored_count = _re.subn(pattern, lambda match: restored_world_ready, core_network_text, count=1, flags=_re.S)
         if restored_count != 1:
             raise RuntimeError("Cannot restore BeamMP world-ready callback; use pristine source ZIP")
         print("  - restored BeamMP world-ready play navigation")
