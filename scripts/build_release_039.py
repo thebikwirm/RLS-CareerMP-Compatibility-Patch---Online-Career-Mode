@@ -1766,6 +1766,21 @@ end
             "Post-join recovery cleanup still incomplete near: "
             + repr(core_network_text[max(0, pos-180):pos+360])
         )
+    # Fix output produced by the earlier faulty builder: the whole callback
+    # was emitted as one Lua line containing literal \n and \t characters.
+    # Only replace the known exact old callback; never interpret escapes
+    # throughout unrelated Lua code.
+    broken_world_ready = (
+        r'local function onWorldReadyState(readyState)\n'
+        r'\tif readyState == 2 and isMpSession and not isGoingMpSession and extensions.ui_router then\n'
+        r'\t\textensions.ui_router.navigate("play")\n'
+        r'\tend\nend\n'
+    )
+    if broken_world_ready in core_network_text:
+        core_network_text = core_network_text.replace(
+            broken_world_ready, restored_world_ready, 1
+        )
+        print("  - repaired escaped world-ready callback in reused BeamMP ZIP")
     # Guard against the historical builder bug that wrote literal \\n / \\t
     # escape characters into Lua source instead of line breaks and tabs.
     if "\\n" in core_network_text[core_network_text.index("local function onWorldReadyState(readyState)"):][:500]:
