@@ -1733,23 +1733,33 @@ end
         "\\tend\\n"
     )
     core_network_text = core_network_text.replace(recovery_tick, "")
-    # Earlier callback restoration can leave the update-loop timer behind.
-    # Remove its complete top-level conditional regardless of indentation
-    # differences in regenerated ZIPs.
-    if "careerMP39JoinUIRecovery" in core_network_text:
-        core_network_text = re.sub(
-            r"(?m)^\\tif careerMP39JoinUIRecovery then\\r?\\n"
-            r"(?:(?!^\\tend\\s*$)[\\s\\S])*^\\tend[ \\t]*\\r?\\n",
-            "", core_network_text, count=1,
+    # On reused ZIPs, remove the complete timer by its outermost Lua 'end'.
+    # Do not use \\s in an end-of-line regex: it also matches newlines and
+    # can skip nested blocks, leaving a partial timer behind.
+    timer_anchor = "\\tif careerMP39JoinUIRecovery then\\n"
+    if timer_anchor in core_network_text:
+        timer_start = core_network_text.index(timer_anchor)
+        # Nested 'end' lines have two or more tabs; exactly one tab denotes
+        # the injected outer conditional. Keep the following onUpdate code.
+        timer_end_match = re.search(
+            r"(?m)^\\tend[ \\t]*(?:\\r?\\n|$)",
+            core_network_text[timer_start:],
         )
-        core_network_text = re.sub(
-            r"(?m)^local careerMP39JoinUIRecovery[^\\n]*\\n", "",
-            core_network_text,
-        )
-        core_network_text = re.sub(
-            r"(?m)^local careerMP39JoinUIReloaded[^\\n]*\\n", "",
-            core_network_text,
-        )
+        if timer_end_match is None:
+            raise RuntimeError("Cannot find outer end of post-join UI timer")
+        timer_end = timer_start + timer_end_match.end()
+        timer_body = core_network_text[timer_start:timer_end]
+        if ("performing one-shot post-join UI reload" not in timer_body
+                or "careerMP39JoinUIRecovery = nil" not in timer_body):
+            raise RuntimeError("Unexpected post-join UI timer content; refusing to strip")
+        core_network_text = core_network_text[:timer_start] + core_network_text[timer_end:]
+        print("  - removed leftover post-join UI timer from onUpdate")
+    core_network_text = re.sub(
+        r"(?m)^local careerMP39JoinUIRecovery[^\\n]*\\n", "", core_network_text,
+    )
+    core_network_text = re.sub(
+        r"(?m)^local careerMP39JoinUIReloaded[^\\n]*\\n", "", core_network_text,
+    )
     if "careerMP39JoinUIRecovery" in core_network_text:
         pos = core_network_text.index("careerMP39JoinUIRecovery")
         raise RuntimeError(
