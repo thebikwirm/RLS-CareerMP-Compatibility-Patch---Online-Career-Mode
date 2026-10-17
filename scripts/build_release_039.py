@@ -1634,6 +1634,21 @@ end
         raise RuntimeError(
             "BeamMP native play-route ownership marker missing after patch"
         )
+    # A previous build may be used as input again. Remove only the exact
+    # obsolete startup-timer injection, never leave it alongside new recovery.
+    stale_marker = "CareerMP39 delayed BeamMP UI reload"
+    if stale_marker in core_network_text:
+        stale_decl = "local careerMP39ReloadDelay = nil -- CareerMP39 delayed BeamMP UI reload\n"
+        stale_update = "\tif careerMP39ReloadDelay then\n\t\tcareerMP39ReloadDelay = careerMP39ReloadDelay - (dt or 0)\n\t\tif careerMP39ReloadDelay <= 0 then\n\t\t\tcareerMP39ReloadDelay = nil\n\t\t\tif not isMpSession and not isGoingMpSession then\n\t\t\t\tlog('I', 'CareerMP39', 'performing deferred BeamMP menu UI reload')\n\t\t\t\treloadUI()\n\t\t\telse\n\t\t\t\tlog('I', 'CareerMP39', 'skipped deferred menu reload during MP session')\n\t\t\tend\n\t\tend\n\tend\n"
+        stale_start = "local function onExtensionLoaded()\n\tconnectToLauncher(true)\n\tcareerMP39ReloadDelay = 5.0\n\tlog('I', 'CareerMP39', 'deferred BeamMP menu UI reload by 5s')\nend"
+        restored_start = "local function onExtensionLoaded()\n\tconnectToLauncher(true)\n\treloadUI() -- required to show modified mainmenu\nend"
+        if not all(part in core_network_text for part in (stale_decl, stale_update, stale_start)):
+            raise RuntimeError("Unexpected old BeamMP UI delay patch; rebuild with a pristine upstream BeamMP.zip")
+        core_network_text = core_network_text.replace(stale_decl, "", 1)
+        core_network_text = core_network_text.replace(stale_update, "", 1)
+        core_network_text = core_network_text.replace(stale_start, restored_start, 1)
+        print("  - removed obsolete BeamMP startup reload timer from reused ZIP")
+
     # Experimental recovery for the UI remount triggered by joining a server.
     # Only once per world-ready transition; avoids changing regular menu startup.
     recovery_marker = "CareerMP39 post-join UI recovery"
