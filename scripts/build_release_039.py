@@ -1412,9 +1412,7 @@ local function ensureBeamMPWorldReadyGuard()
 	beamMPWorldReadyWrapper = function(readyState, ...)
 		local inMPSession = mp.isMPSession and mp.isMPSession()
 		if readyState == 2 and inMPSession then
-			log("D", logTag,
-				"suppressed redundant BeamMP world-ready play navigation")
-			return
+			log("I", logTag, "delegating world-ready transition to BeamMP")
 		end
 		return beamMPWorldReadyOriginal(readyState, ...)
 	end
@@ -1649,49 +1647,51 @@ end
         core_network_text = core_network_text.replace(stale_start, restored_start, 1)
         print("  - removed obsolete BeamMP startup reload timer from reused ZIP")
 
-    # Experimental recovery for the UI remount triggered by joining a server.
-    # Only once per world-ready transition; avoids changing regular menu startup.
-    recovery_marker = "CareerMP39 post-join UI recovery"
-    if recovery_marker not in core_network_text:
-        world_anchor = "log('D', 'onWorldReadyState', 'BeamNG 0.39 native play route retained; duplicate BeamMP navigation skipped')"
-        update_anchor = "local function onUpdate(dt)\\n"
-        if world_anchor not in core_network_text or "local function onUpdate(dt)\n" not in core_network_text:
-            raise RuntimeError("BeamMP post-join UI recovery anchors changed")
-        core_network_text = core_network_text.replace(
-            "local function onWorldReadyState(readyState)\n",
-            "local careerMP39JoinUIRecovery = nil -- CareerMP39 post-join UI recovery\n"
-            + "local careerMP39JoinUIReloaded = false\n"
-            + "local function onWorldReadyState(readyState)\n",
-            1,
-        )
-        core_network_text = core_network_text.replace(
-            world_anchor,
-            world_anchor + "\n"
-            + "\t\tif not careerMP39JoinUIReloaded then\n"
-            + "\t\t\tcareerMP39JoinUIRecovery = 3.0\n"
-            + "\t\t\tcareerMP39JoinUIReloaded = true\n"
-            + "\t\t\tlog('I', 'CareerMP39', 'scheduled one-shot post-join UI reload')\n"
-            + "\t\tend",
-            1,
-        )
-        core_network_text = core_network_text.replace(
-            "local function onUpdate(dt)\n",
-            "local function onUpdate(dt)\n"
-            + "\tif careerMP39JoinUIRecovery then\n"
-            + "\t\tcareerMP39JoinUIRecovery = careerMP39JoinUIRecovery - (dt or 0)\n"
-            + "\t\tif careerMP39JoinUIRecovery <= 0 then\n"
-            + "\t\t\tcareerMP39JoinUIRecovery = nil\n"
-            + "\t\t\tif isMpSession and worldReadyState == 2 then\n"
-            + "\t\t\t\tlog('I', 'CareerMP39', 'performing one-shot post-join UI reload')\n"
-            + "\t\t\t\treloadUI()\n"
-            + "\t\t\telse\n"
-            + "\t\t\t\tlog('I', 'CareerMP39', 'skipped post-join UI reload: session not ready')\n"
-            + "\t\t\tend\n"
-            + "\t\tend\n"
-            + "\tend\n",
-            1,
-        )
-        print("  - added one-shot UI reload after world readiness for join handoff recovery")
+    # Switch back to BeamMP owning the world-ready gameplay transition.
+    # This also repairs ZIPs previously generated with our suppression patch.
+    restored_world_ready = (
+        'local function onWorldReadyState(readyState)\\n'
+        '\\tif readyState == 2 and isMpSession and not isGoingMpSession and extensions.ui_router then\\n'
+        '\\t\\textensions.ui_router.navigate("play")\\n'
+        '\\tend\\nend\\n'
+    )
+    if "BeamNG 0.39 native play-route ownership" in core_network_text:
+        import re as _re
+        pattern = (r'local function onWorldReadyState\\(readyState\\)\\n'
+                   r'\\t-- BeamNG 0\\.39 native play-route ownership.*?\\nend\\n')
+        core_network_text, restored_count = _re.subn(pattern, restored_world_ready, core_network_text, count=1, flags=_re.S)
+        if restored_count != 1:
+            raise RuntimeError("Cannot restore BeamMP world-ready callback; use pristine source ZIP")
+        print("  - restored BeamMP world-ready play navigation")
+    # Remove the one-shot post-join reload experiment from reused ZIPs.
+    recovery_decl = ("local careerMP39JoinUIRecovery = nil -- CareerMP39 post-join UI recovery\\n"
+                     "local careerMP39JoinUIReloaded = false\\n")
+    core_network_text = core_network_text.replace(recovery_decl, "")
+    recovery_arm = (
+        "\\t\\tif not careerMP39JoinUIReloaded then\\n"
+        "\\t\\t\\tcareerMP39JoinUIRecovery = 3.0\\n"
+        "\\t\\t\\tcareerMP39JoinUIReloaded = true\\n"
+        "\\t\\t\\tlog('I', 'CareerMP39', 'scheduled one-shot post-join UI reload')\\n"
+        "\\t\\tend"
+    )
+    core_network_text = core_network_text.replace(recovery_arm, "")
+    recovery_tick = (
+        "\\tif careerMP39JoinUIRecovery then\\n"
+        "\\t\\tcareerMP39JoinUIRecovery = careerMP39JoinUIRecovery - (dt or 0)\\n"
+        "\\t\\tif careerMP39JoinUIRecovery <= 0 then\\n"
+        "\\t\\t\\tcareerMP39JoinUIRecovery = nil\\n"
+        "\\t\\t\\tif isMpSession and worldReadyState == 2 then\\n"
+        "\\t\\t\\t\\tlog('I', 'CareerMP39', 'performing one-shot post-join UI reload')\\n"
+        "\\t\\t\\t\\treloadUI()\\n"
+        "\\t\\t\\telse\\n"
+        "\\t\\t\\t\\tlog('I', 'CareerMP39', 'skipped post-join UI reload: session not ready')\\n"
+        "\\t\\t\\tend\\n"
+        "\\t\\tend\\n"
+        "\\tend\\n"
+    )
+    core_network_text = core_network_text.replace(recovery_tick, "")
+    if "careerMP39JoinUIRecovery" in core_network_text:
+        raise RuntimeError("Unable to remove experimental post-join UI recovery; use pristine source ZIP")
     entries[core_network_path] = core_network_text.encode("utf-8")
 
     route_marker = "BeamNG 0.39 direct child-route handoff"
