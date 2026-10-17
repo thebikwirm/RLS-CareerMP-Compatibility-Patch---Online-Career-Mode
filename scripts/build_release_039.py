@@ -1679,12 +1679,29 @@ end
         '\\tend\\nend\\n'
     )
     if "BeamNG 0.39 native play-route ownership" in core_network_text:
-        import re as _re
-        pattern = (r'local function onWorldReadyState\\(readyState\\)\\n'
-                   r'\\t-- BeamNG 0\\.39 native play-route ownership.*?\\nend\\n')
-        core_network_text, restored_count = _re.subn(pattern, lambda match: restored_world_ready, core_network_text, count=1, flags=_re.S)
-        if restored_count != 1:
-            raise RuntimeError("Cannot restore BeamMP world-ready callback; use pristine source ZIP")
+        # Generated ZIPs may have the later post-join recovery injected into
+        # this function. Replace the *whole* old callback, bounded at its own
+        # top-level end, rather than matching exact comments/whitespace.
+        callback_pattern = re.compile(
+            r"(?m)^local function onWorldReadyState\\(readyState\\)\\r?\\n"
+            r"(?:(?!^end\\s*$)[\\s\\S])*^end\\s*$"
+        )
+        callbacks = list(callback_pattern.finditer(core_network_text))
+        marked = [
+            match for match in callbacks
+            if "BeamNG 0.39 native play-route ownership" in match.group(0)
+        ]
+        if len(marked) != 1:
+            raise RuntimeError(
+                "Cannot uniquely identify old BeamMP world-ready callback; "
+                "use pristine source ZIP"
+            )
+        match = marked[0]
+        core_network_text = (
+            core_network_text[:match.start()]
+            + restored_world_ready.rstrip("\\n")
+            + core_network_text[match.end():]
+        )
         print("  - restored BeamMP world-ready play navigation")
     # Remove the one-shot post-join reload experiment from reused ZIPs.
     recovery_decl = ("local careerMP39JoinUIRecovery = nil -- CareerMP39 post-join UI recovery\\n"
