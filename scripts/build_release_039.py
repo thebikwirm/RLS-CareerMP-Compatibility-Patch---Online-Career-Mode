@@ -1624,37 +1624,10 @@ def patch_beammp_039_ui(entries: dict[str, bytes]) -> None:
         )
 
     core_network_text = core_network_payload.decode("utf-8").replace("\r\n", "\n")
-    world_ready_marker = "BeamNG 0.39 native play-route ownership"
-    if world_ready_marker not in core_network_text:
-        old_world_ready = '''local function onWorldReadyState(readyState)
-\tif readyState == 2 and isMpSession and not isGoingMpSession and extensions.ui_router then
-\t\textensions.ui_router.navigate("play")
-\tend
-end
-'''
-        new_world_ready = '''local function onWorldReadyState(readyState)
-\t-- BeamNG 0.39 native play-route ownership
-\t-- core_gamestate/BeamNG's router already completes the world-ready handoff.
-\t-- Calling ui_router.navigate("play") here creates a duplicate transition that
-\t-- is rejected by the 0.39 router while the native handoff is still settling.
-\tif readyState == 2 and isMpSession and not isGoingMpSession then
-\t\tlog('D', 'onWorldReadyState', 'BeamNG 0.39 native play route retained; duplicate BeamMP navigation skipped')
-\tend
-end
-'''
-        if old_world_ready not in core_network_text:
-            raise RuntimeError(
-                "Unable to patch BeamMP world-ready play navigation; "
-                "MPCoreNetwork.lua layout changed"
-            )
-        core_network_text = core_network_text.replace(
-            old_world_ready, new_world_ready, 1
-        )
+    # Keep BeamMP responsible for its normal world-ready navigation.
+    # Any prior suppressing callback is restored later in this function.
+    # Do not first patch a pristine callback into a suppressed form.
 
-    if world_ready_marker not in core_network_text:
-        raise RuntimeError(
-            "BeamMP native play-route ownership marker missing after patch"
-        )
     # A previous build may be used as input again. Remove only the exact
     # obsolete startup-timer injection, never leave it alongside new recovery.
     stale_marker = "CareerMP39 delayed BeamMP UI reload"
