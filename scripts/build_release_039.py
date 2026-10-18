@@ -2072,6 +2072,112 @@ if (typeof window !== 'undefined' && !window.__careerMP39BootProbeV11) {
         print("  - BeamMP legacy logo URL already absent/patched")
 
 
+def patch_rls_vue_phone_routes_039(entries: dict[str, bytes]) -> bool:
+    """Expose 2.7+ RLS Vue phone routes through the BeamNG 0.39 mod entrypoint.
+
+    0.39 loads the built-in Vue router, not modded /src/modules/career/routes.js.
+    Keep the author's route names and views but register missing routes at runtime.
+    """
+    mod_entry = "ui/ui-vue/mods/rls_career_overhaul/index.js"
+    source_routes = "ui/ui-vue/src/modules/career/routes.js"
+    marker = "// CareerMP39 RLS phone route installer v1"
+    if mod_entry not in entries or source_routes not in entries:
+        print("  - RLS Vue phone route installer skipped: 2.7+ mod entry/source routes not found")
+        return False
+
+    script = entries[mod_entry].decode("utf-8")
+    if marker in script:
+        print("  - RLS Vue phone route installer already present")
+        return False
+    if 'import { getComponent } from "@/services/modManager"' not in script:
+        raise RuntimeError("RLS mod entrypoint no longer exposes getComponent")
+    anchor = "export async function onLoad() {"
+    if script.count(anchor) != 1 or "async function waitForMainApp(" not in script:
+        raise RuntimeError("Unexpected RLS Vue mod entrypoint; refusing phone route injection")
+
+    routes_source = entries[source_routes].decode("utf-8")
+    imports = dict(re.findall(
+        r'import\s+(\w+)\s+from\s+"\./views/([^"]+)"', routes_source
+    ))
+    manifest = []
+    for match in re.finditer(
+        r'\{\s*path:\s*"([^"]+)"\s*,\s*name:\s*"([^"]+)"\s*,\s*component:\s*(\w+)',
+        routes_source,
+    ):
+        route_path, route_name, component = match.groups()
+        if not (route_name.startswith("phone-") or route_name == "car-meets-phone"):
+            continue
+        view_file = imports.get(component)
+        if not view_file:
+            raise RuntimeError(f"Unresolved RLS phone route component: {component}")
+        source_path = "ui/ui-vue/src/modules/career/views/" + view_file
+        if source_path not in entries:
+            raise RuntimeError(f"Missing RLS phone route component: {source_path}")
+        manifest.append({
+            "path": route_path,
+            "name": route_name,
+            "file": "/" + source_path,
+            "props": ":" in route_path,
+        })
+
+    if not any(route["name"] == "phone-main" for route in manifest):
+        raise RuntimeError("RLS phone-main route missing from source routes")
+
+    inject = r'''
+// CareerMP39 RLS phone route installer v1
+const phoneRouteManifest = __MANIFEST__
+
+function createPhoneRouteComponent(file, name) {
+  return window.Vue.defineAsyncComponent(async () => {
+    let data = await getComponent(file, false, true)
+    if (!data?.compiled && typeof data?.compile === "function") data = await data.compile()
+    if (data?.error || !data?.component) {
+      console.error("[CareerMP39Phone] Failed to compile " + name, data?.error, data?.errorObj)
+      throw new Error("Missing RLS phone component: " + name)
+    }
+    return data.component
+  })
+}
+
+async function registerRlsPhoneRoutes() {
+  const ready = await waitForMainApp()
+  if (!ready) {
+    console.error("[CareerMP39Phone] Vue router not ready; phone routes not installed")
+    return
+  }
+  const router = window.vueRouter
+  if (typeof router.addRoute !== "function" || typeof router.hasRoute !== "function") {
+    console.error("[CareerMP39Phone] Vue router has no dynamic route API")
+    return
+  }
+  let added = 0
+  for (const route of phoneRouteManifest) {
+    if (router.hasRoute(route.name)) continue
+    try {
+      router.addRoute({
+        path: "/career/" + route.path,
+        name: route.name,
+        component: createPhoneRouteComponent(route.file, route.name),
+        props: route.props,
+      })
+      added++
+    } catch (err) {
+      console.error("[CareerMP39Phone] Cannot register " + route.name, err)
+    }
+  }
+  console.warn("[CareerMP39Phone] Registered " + added + " missing routes (" +
+    phoneRouteManifest.length + " phone routes checked); phone-main=" + router.hasRoute("phone-main"))
+}
+'''
+    inject = inject.replace("__MANIFEST__", json.dumps(manifest, separators=(",", ":")))
+    script = script.replace(
+        anchor, inject + "\n" + anchor.replace("{", "{\n  await registerRlsPhoneRoutes()"), 1
+    )
+    entries[mod_entry] = script.encode("utf-8")
+    print(f"  - installed 0.39 Vue router registration for {len(manifest)} RLS phone routes")
+    return True
+
+
 def patch_rls_phone_039(archive: Path, zip_engine: str) -> tuple[int, str]:
     """Apply narrow BeamNG 0.39 RLS taxi API guards, preserving other logic."""
     entries = read_zip_entries(archive)
@@ -2120,6 +2226,9 @@ def patch_rls_phone_039(archive: Path, zip_engine: str) -> tuple[int, str]:
             print("  - RLS computer tutorial guards already present")
         else:
             print("WARNING: RLS computer tutorial call pattern differs; review source")
+
+    if patch_rls_vue_phone_routes_039(entries):
+        changed = True
 
     if changed:
         write_zip(archive, entries, engine=zip_engine)
