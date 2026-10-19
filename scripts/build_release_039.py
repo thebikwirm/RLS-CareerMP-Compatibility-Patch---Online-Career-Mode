@@ -2362,6 +2362,17 @@ def main() -> int:
     rls_size = None
     rls_hash = None
     if rls_original and rls_out:
+        # RLS 2.7.2 has a newer extensionManager and modScript lifecycle than
+        # the existing RLS 2.6.7 overlay. Until these are rebased, overlaying
+        # the old files would silently discard upstream startup logic.
+        if rls_version_match and rls_version_match.group(1) == "2.7.2":
+            raise SystemExit(
+                "RLS 2.7.2 compatibility port is not complete: "
+                "the 2.6.7 patches/RLS overlay would replace the newer "
+                "overhaul/extensionManager.lua and modScript.lua. "
+                "See docs/RLS_2_7_2_PORT_AUDIT.md. "
+                "Do not deploy a renamed 2.6.7 patch as 2.7.2."
+            )
         rls_size, rls_hash = build_mod(
             rls_original,
             rls_patch_dir,
