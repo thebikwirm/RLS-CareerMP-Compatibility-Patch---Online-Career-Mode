@@ -2341,10 +2341,20 @@ def main() -> int:
     # Always use one canonical RLS output name. The previous builder derived
     # the filename from the input archive, so rebuilding an already-compatible
     # zip produced names such as *_careermp_compatible_careermp039_compatible.zip.
+    # Preserve the input RLS version in the output name. The previous hard-coded
+    # 2.6.7 name made a 2.7.x build look like an old compatibility archive.
+    rls_version_match = (
+        re.search(r"rls_career_overhaul_(\d+\.\d+\.\d+)", rls_original.name, re.I)
+        if rls_original else None
+    )
+    if rls_original and not rls_version_match:
+        raise SystemExit(
+            "Cannot detect RLS version from source filename. "
+            "Expected rls_career_overhaul_X.Y.Z*.zip"
+        )
     rls_out = (
-        out_dir / "rls_career_overhaul_2.6.7_careermp_compatible.zip"
-        if rls_original
-        else None
+        out_dir / f"rls_career_overhaul_{rls_version_match.group(1)}_careermp_compatible.zip"
+        if rls_original else None
     )
     careermp_out = out_dir / "CareerMP.zip"
     beammp_out = out_dir / "BeamMP.zip"
