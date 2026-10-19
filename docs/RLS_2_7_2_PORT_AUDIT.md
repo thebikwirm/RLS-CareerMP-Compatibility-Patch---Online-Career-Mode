@@ -35,3 +35,42 @@ Target branch: `beamng-0.39.4-careermp`. Do not change `feature/careermp-rls-pho
 ## Staged implementation (commit 5c0b20f)
 
 Added `scripts/rls_272_startup.py` to patch the **2.7.2 originals** in-memory. It defers the full 2.7.2 modScript initialization list until the BeamNG world, active career and profile path are ready, and suppresses `deactivateBeamMP()` from the new extension manager while retaining `ensureInputActionsRegistered()`. This is **not yet wired into the release builder**. The 2.7.2 build safety guard remains enabled. Review the upstream extension manager's own startup loading before lifting that guard, especially for CEF/UI route reloads and any new profile-dependent services.
+
+## Overlay collision inventory (2026-10-19)
+
+Compared the 24 file overlays under `patches/RLS/` with the committed RLS
+2.7.2 source tree. **12 existing patch files collide** with files already
+provided by 2.7.2; do not copy these over without a three-way port:
+
+```text
+lua/ge/extensions/career/modules/garageManager.lua
+lua/ge/extensions/career/modules/switchMap.lua
+lua/ge/extensions/overhaul/extensionManager.lua
+lua/ge/extensions/overrides/career/modules/computer.lua
+lua/ge/extensions/overrides/career/modules/delivery/cargoCards.lua
+lua/ge/extensions/overrides/career/modules/delivery/cargoScreen.lua
+lua/ge/extensions/overrides/career/modules/insurance/insurance.lua
+lua/ge/extensions/overrides/career/modules/insurance/repairScreen.lua
+lua/ge/extensions/overrides/career/modules/playerDriving.lua
+lua/ge/extensions/overrides/career/modules/speedTraps.lua
+lua/ge/extensions/overrides/career/modules/tuning.lua
+scripts/rls_career_overhaul/modScript.lua
+```
+
+The other 12 patch paths are absent from the **slim** upstream snapshot; this
+does NOT establish that they are genuinely new or safe to ship, only that they
+do not collide with the supplied subset. Review those individually.
+
+Added `scripts/verify_rls_272_startup.py` as a reproducible source-level
+verification of `scripts/rls_272_startup.py`. It checks retention of 2.7.2
+extension initialization, CareerMP profile gate, input registration and
+idempotency. Run locally with Python 3 using
+`python scripts/verify_rls_272_startup.py`. It has not yet been run inside
+the game. The 2.7.2 build guard stays active.
+
+### Next porting action
+
+Create a **version-specific overlay allowlist** for 2.7.2, and port the
+12 colliding files one-by-one against the 2.7.2 originals. Only then switch
+the build guard to a first test build. Never blindly overlay legacy
+`extensionManager.lua` or `modScript.lua`.
