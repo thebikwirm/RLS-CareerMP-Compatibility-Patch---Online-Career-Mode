@@ -31,3 +31,7 @@ Target branch: `beamng-0.39.4-careermp`. Do not change `feature/careermp-rls-pho
 - Version-scope/remove old whole-file overrides where new 2.7.2 source has newer code.
 - Add builder assertions and offline output checks for retained startup/phone features.
 - Test on BeamNG 0.39.4 with patched BeamMP + CareerMP; inspect CEF bootstrap separately.
+
+## Staged implementation (commit 5c0b20f)
+
+Added `scripts/rls_272_startup.py` to patch the **2.7.2 originals** in-memory. It defers the full 2.7.2 modScript initialization list until the BeamNG world, active career and profile path are ready, and suppresses `deactivateBeamMP()` from the new extension manager while retaining `ensureInputActionsRegistered()`. This is **not yet wired into the release builder**. The 2.7.2 build safety guard remains enabled. Review the upstream extension manager's own startup loading before lifting that guard, especially for CEF/UI route reloads and any new profile-dependent services.
