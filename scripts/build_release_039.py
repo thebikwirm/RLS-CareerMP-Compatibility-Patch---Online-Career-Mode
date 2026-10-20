@@ -2333,6 +2333,11 @@ def main() -> int:
         help="Optional RLS source zip. Missing input skips the RLS rebuild.",
     )
     parser.add_argument(
+        "--rls-272-dev-build",
+        action="store_true",
+        help="Explicitly build an EXPERIMENTAL RLS 2.7.2 test zip; do not auto-install it.",
+    )
+    parser.add_argument(
         "--careermp-039",
         type=Path,
         default=None,
@@ -2451,25 +2456,39 @@ def main() -> int:
             # Stage and verify against 2.7.2 originals, not the old overlay.
             # The remaining CareerMP bridge / career-entry changes are still
             # under review. Refuse to write or install an incomplete release.
-            stage_rls_272_entries(
+            staged = stage_rls_272_entries(
                 rls_original, repo_root / "patches" / RLS272_PATCH_DIR, rls_out.name
             )
-            raise SystemExit(
-                "RLS 2.7.2 staging checks completed; RELEASE BLOCKED "
-                "until CareerMP profile/save and gameplay overlays are ported. "
-                "No 2.7.2 archive was written."
+            if not args.rls_272_dev_build:
+                raise SystemExit(
+                    "RLS 2.7.2 staged successfully, but release is BLOCKED. "
+                    "Pass --rls-272-dev-build for an experimental local test zip."
+                )
+            if server_root or args.rls_install_name:
+                raise SystemExit(
+                    "Experimental RLS 2.7.2 build cannot be auto-installed to "
+                    "the server. Re-run without --server-root/--rls-install-name."
+                )
+            info_path = "mod_info/rls_career_overhaul/info.json"
+            if info_path in staged:
+                data = json.loads(staged[info_path].decode("utf-8-sig"))
+                data["filename"] = rls_out.name
+                staged[info_path] = (json.dumps(data, ensure_ascii=False, indent=4) + "\n").encode("utf-8")
+            print("WARNING: Building EXPERIMENTAL RLS 2.7.2; runtime compatibility unverified.")
+            write_zip(rls_out, staged, engine=args.zip_engine)
+            rls_size, rls_hash = rls_out.stat().st_size, sha256sum(rls_out)
+        else:
+            rls_size, rls_hash = build_mod(
+                rls_original,
+                rls_patch_dir,
+                rls_out,
+                RLS_REMOVE_PREFIXES,
+                args.zip_engine,
+                apply_legacy_online_save_timing=False,
+                apply_legacy_override_manager_patch=False,
             )
-        rls_size, rls_hash = build_mod(
-            rls_original,
-            rls_patch_dir,
-            rls_out,
-            RLS_REMOVE_PREFIXES,
-            args.zip_engine,
-            apply_legacy_online_save_timing=False,
-            apply_legacy_override_manager_patch=False,
-        )
 
-        rls_size, rls_hash = patch_rls_phone_039(rls_out, args.zip_engine)
+            rls_size, rls_hash = patch_rls_phone_039(rls_out, args.zip_engine)
 
         # Clean up filenames created by older versions of this builder.
         for stale_rls in out_dir.glob(
