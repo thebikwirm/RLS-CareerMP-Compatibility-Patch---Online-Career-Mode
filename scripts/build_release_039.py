@@ -33,6 +33,26 @@ def stage_rls_272_entries(source: Path, patch_dir: Path, output_name: str) -> di
     # Do NOT run patch_rls_entries() yet: that routine contains mandatory
     # assertions and whole-file rewrites developed for RLS 2.6.7. Its 2.7.2
     # migration will be reviewed separately, including info.json metadata.
+    # Verify the 2.7.2 save contract and the isolated bridge. RLS 2.7.2
+    # already exposes the 0.39 profile API; do not rewrite its save system.
+    bridge_path = "lua/ge/extensions/overhaul/careermp39Compat.lua"
+    save_path = "lua/ge/extensions/overrides/career/saveSystem.lua"
+    if bridge_path not in entries or save_path not in entries:
+        raise RuntimeError("RLS 2.7.2 profile bridge or native save-system override missing")
+    save_source = entries[save_path].decode("utf-8")
+    bridge_source = entries[bridge_path].decode("utf-8")
+    for required in ("M.getCurrentProfile = getCurrentProfile",
+                     "M.getCurrentSaveSlot = getCurrentProfile"):
+        if required not in save_source:
+            raise RuntimeError("RLS 2.7.2 save-system contract changed: " + required)
+    if 'return currentProfile, currentSavePath' not in save_source:
+        raise RuntimeError("RLS 2.7.2 save system no longer returns profile/path pair")
+    if 'function M.getCurrentProfile()' not in bridge_source:
+        raise RuntimeError("RLS 2.7.2 profile bridge missing getCurrentProfile")
+    for module in ("lua/ge/extensions/career/modules/credit.lua",
+                   "lua/ge/extensions/career/modules/propertyOwners.lua"):
+        if module not in entries:
+            raise RuntimeError("RLS 2.7.2 profile-dependent module missing: " + module)
     # Do not let a legacy overlay regress the updated RLS startup files.
     manager = entries[RLS272_MANAGER].decode("utf-8")
     script = entries[RLS272_MODSCRIPT].decode("utf-8")
