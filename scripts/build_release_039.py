@@ -13,7 +13,6 @@ from build_release import (
     read_zip_entries,
     sha256sum,
     overlay_directory,
-    patch_rls_entries,
     remove_entry_prefixes,
 )
 from rls_272_startup import patch_rls_272_startup, MODSCRIPT as RLS272_MODSCRIPT, MANAGER as RLS272_MANAGER
@@ -31,11 +30,9 @@ def stage_rls_272_entries(source: Path, patch_dir: Path, output_name: str) -> di
     remove_entry_prefixes(entries, RLS_REMOVE_PREFIXES)
     overlay_directory(entries, patch_dir)
     patch_rls_272_startup(entries)
-    patch_rls_entries(
-        entries, output_name,
-        apply_legacy_online_save_timing=False,
-        apply_legacy_override_manager_patch=False,
-    )
+    # Do NOT run patch_rls_entries() yet: that routine contains mandatory
+    # assertions and whole-file rewrites developed for RLS 2.6.7. Its 2.7.2
+    # migration will be reviewed separately, including info.json metadata.
     # Do not let a legacy overlay regress the updated RLS startup files.
     manager = entries[RLS272_MANAGER].decode("utf-8")
     script = entries[RLS272_MODSCRIPT].decode("utf-8")
