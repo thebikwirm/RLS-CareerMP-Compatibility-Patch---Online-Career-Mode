@@ -16,6 +16,7 @@ from build_release import (
     remove_entry_prefixes,
 )
 from rls_272_startup import patch_rls_272_startup, MODSCRIPT as RLS272_MODSCRIPT, MANAGER as RLS272_MANAGER
+from rls_272_garage_insurance import verify_rls_272_garage_insurance
 from zip_utils import add_zip_engine_argument, describe_zip_engine, write_zip
 
 
@@ -74,6 +75,7 @@ def stage_rls_272_entries(source: Path, patch_dir: Path, output_name: str) -> di
     inventory_bridge_source = entries[inventory_bridge].decode("utf-8")
     if "function M.install()" not in inventory_bridge_source:
         raise RuntimeError("RLS 2.7.2 inventory compatibility install hook missing")
+    verify_rls_272_garage_insurance(entries)
     # Do not let a legacy overlay regress the updated RLS startup files.
     manager = entries[RLS272_MANAGER].decode("utf-8")
     script = entries[RLS272_MODSCRIPT].decode("utf-8")
