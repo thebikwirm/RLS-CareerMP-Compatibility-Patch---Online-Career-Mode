@@ -33,6 +33,11 @@ def stage_rls_272_entries(source: Path, patch_dir: Path, output_name: str) -> di
     overlay_directory(entries, patch_dir)
     patch_rls_272_startup(entries)
     patch_rls_272_gameplay(entries)
+    # Register 2.7.2 phone pages in the shipped Vue mod entrypoint. Unlike
+    # modifications to ui-vue/src/modules/career/routes.js, this entrypoint
+    # runs with the compiled 0.39 UI and can add routes dynamically.
+    if not patch_rls_vue_phone_routes_039(entries):
+        raise RuntimeError("RLS 2.7.2 phone routes were not installed in staging")
     # Do NOT run patch_rls_entries() yet: that routine contains mandatory
     # assertions and whole-file rewrites developed for RLS 2.6.7. Its 2.7.2
     # migration will be reviewed separately, including info.json metadata.
@@ -2226,12 +2231,20 @@ async function registerRlsPhoneRoutes() {
   for (const route of phoneRouteManifest) {
     if (router.hasRoute(route.name)) continue
     try {
-      router.addRoute({
-        path: "/career/" + route.path,
+      const routeRecord = {
+        path: route.path,
         name: route.name,
         component: createPhoneRouteComponent(route.file, route.name),
         props: route.props,
-      })
+      }
+      // RLS defines phone pages as children of the career layout. Keeping
+      // that nesting preserves its navigation shell and route context.
+      if (router.hasRoute("career")) {
+        router.addRoute("career", routeRecord)
+      } else {
+        console.warn("[CareerMP39Phone] career route missing; using absolute path for " + route.name)
+        router.addRoute({ ...routeRecord, path: "/career/" + route.path })
+      }
       added++
     } catch (err) {
       console.error("[CareerMP39Phone] Cannot register " + route.name, err)
