@@ -17,6 +17,7 @@ from build_release import (
 )
 from rls_272_startup import patch_rls_272_startup, MODSCRIPT as RLS272_MODSCRIPT, MANAGER as RLS272_MANAGER
 from rls_272_garage_insurance import verify_rls_272_garage_insurance
+from rls_272_gameplay import patch_rls_272_gameplay
 from zip_utils import add_zip_engine_argument, describe_zip_engine, write_zip
 
 
@@ -31,6 +32,7 @@ def stage_rls_272_entries(source: Path, patch_dir: Path, output_name: str) -> di
     remove_entry_prefixes(entries, RLS_REMOVE_PREFIXES)
     overlay_directory(entries, patch_dir)
     patch_rls_272_startup(entries)
+    patch_rls_272_gameplay(entries)
     # Do NOT run patch_rls_entries() yet: that routine contains mandatory
     # assertions and whole-file rewrites developed for RLS 2.6.7. Its 2.7.2
     # migration will be reviewed separately, including info.json metadata.
