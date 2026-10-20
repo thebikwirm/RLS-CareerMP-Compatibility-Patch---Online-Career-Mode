@@ -2469,7 +2469,7 @@ def main() -> int:
                     "Experimental RLS 2.7.2 build cannot be auto-installed to "
                     "the server. Re-run without --server-root/--rls-install-name."
                 )
-            info_path = "mod_info/rls_career_overhaul/info.json"
+            info_path = "mod_info/RLSCO24/info.json"
             if info_path in staged:
                 data = json.loads(staged[info_path].decode("utf-8-sig"))
                 data["filename"] = rls_out.name
