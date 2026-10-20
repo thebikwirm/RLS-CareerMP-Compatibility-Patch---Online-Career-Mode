@@ -12,8 +12,38 @@ from build_release import (
     read_careermp_entries,
     read_zip_entries,
     sha256sum,
+    overlay_directory,
+    patch_rls_entries,
+    remove_entry_prefixes,
 )
+from rls_272_startup import patch_rls_272_startup, MODSCRIPT as RLS272_MODSCRIPT, MANAGER as RLS272_MANAGER
 from zip_utils import add_zip_engine_argument, describe_zip_engine, write_zip
+
+
+# RLS 2.7.2 uses a deliberately empty, version-specific overlay while its
+# old whole-file replacements are being rebased. Never use patches/RLS here.
+RLS272_PATCH_DIR = "RLS-2.7.2"
+
+
+def stage_rls_272_entries(source: Path, patch_dir: Path, output_name: str) -> dict[str, bytes]:
+    """Prepare an inspectable 2.7.2 build in memory; do not publish it yet."""
+    entries = read_zip_entries(source)
+    remove_entry_prefixes(entries, RLS_REMOVE_PREFIXES)
+    overlay_directory(entries, patch_dir)
+    patch_rls_272_startup(entries)
+    patch_rls_entries(
+        entries, output_name,
+        apply_legacy_online_save_timing=False,
+        apply_legacy_override_manager_patch=False,
+    )
+    # Do not let a legacy overlay regress the updated RLS startup files.
+    manager = entries[RLS272_MANAGER].decode("utf-8")
+    script = entries[RLS272_MODSCRIPT].decode("utf-8")
+    if "ensureInputActionsRegistered()" not in manager:
+        raise RuntimeError("RLS 2.7.2 input registration was lost")
+    if "-- RLSCareerMP39 2.7.2 startup gate v1" not in script:
+        raise RuntimeError("RLS 2.7.2 startup gate was lost")
+    return entries
 
 
 def validate_careermp_039(careermp_zip: Path) -> None:
@@ -2362,16 +2392,17 @@ def main() -> int:
     rls_size = None
     rls_hash = None
     if rls_original and rls_out:
-        # RLS 2.7.2 has a newer extensionManager and modScript lifecycle than
-        # the existing RLS 2.6.7 overlay. Until these are rebased, overlaying
-        # the old files would silently discard upstream startup logic.
         if rls_version_match and rls_version_match.group(1) == "2.7.2":
+            # Stage and verify against 2.7.2 originals, not the old overlay.
+            # The remaining CareerMP bridge / career-entry changes are still
+            # under review. Refuse to write or install an incomplete release.
+            stage_rls_272_entries(
+                rls_original, repo_root / "patches" / RLS272_PATCH_DIR, rls_out.name
+            )
             raise SystemExit(
-                "RLS 2.7.2 compatibility port is not complete: "
-                "the 2.6.7 patches/RLS overlay would replace the newer "
-                "overhaul/extensionManager.lua and modScript.lua. "
-                "See docs/RLS_2_7_2_PORT_AUDIT.md. "
-                "Do not deploy a renamed 2.6.7 patch as 2.7.2."
+                "RLS 2.7.2 staging checks completed; RELEASE BLOCKED "
+                "until CareerMP profile/save and gameplay overlays are ported. "
+                "No 2.7.2 archive was written."
             )
         rls_size, rls_hash = build_mod(
             rls_original,
