@@ -53,6 +53,27 @@ def stage_rls_272_entries(source: Path, patch_dir: Path, output_name: str) -> di
                    "lua/ge/extensions/career/modules/propertyOwners.lua"):
         if module not in entries:
             raise RuntimeError("RLS 2.7.2 profile-dependent module missing: " + module)
+    # The multiplayer entry must delegate to RLS 2.7.2's existing career
+    # implementation; never overwrite the full career.lua implementation.
+    career_entry = "lua/ge/extensions/overrides/career/careerMP.lua"
+    career_original = "lua/ge/extensions/overrides/career/career.lua"
+    inventory_original = "lua/ge/extensions/overrides/career/modules/inventory.lua"
+    inventory_bridge = "lua/ge/extensions/overrides/career/modules/careermpCompat.lua"
+    for required in (career_entry, career_original, inventory_original, inventory_bridge):
+        if required not in entries:
+            raise RuntimeError("RLS 2.7.2 career/inventory staging file missing: " + required)
+    entry_source = entries[career_entry].decode("utf-8")
+    if "require('lua.ge.extensions.overrides.career.career')" not in entry_source:
+        raise RuntimeError("RLS 2.7.2 CareerMP entry no longer delegates to RLS career")
+    inventory_source = entries[inventory_original].decode("utf-8")
+    for required in ("M.spawnVehicle = spawnVehicle",
+                     "M.getVehicleIdFromInventoryId = getVehicleIdFromInventoryId",
+                     "M.getInventoryIdFromVehicleId = getInventoryIdFromVehicleId"):
+        if required not in inventory_source:
+            raise RuntimeError("RLS 2.7.2 inventory contract changed: " + required)
+    inventory_bridge_source = entries[inventory_bridge].decode("utf-8")
+    if "function M.install()" not in inventory_bridge_source:
+        raise RuntimeError("RLS 2.7.2 inventory compatibility install hook missing")
     # Do not let a legacy overlay regress the updated RLS startup files.
     manager = entries[RLS272_MANAGER].decode("utf-8")
     script = entries[RLS272_MODSCRIPT].decode("utf-8")
