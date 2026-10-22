@@ -15,6 +15,7 @@ from careermp_040_handshake import patch_client_handshake
 from careermp_040_profiles import patch_careermp_overhaul_profiles
 from careermp_040_enabler import patch_overhaul_activation_flow
 from careermp_040_payments import patch_overhaul_payments
+from careermp_040_runtime import patch_overhaul_only_runtime
 from careermp_040_server import patch_server
 
 def main() -> None:
@@ -40,6 +41,7 @@ def main() -> None:
     patch_careermp_overhaul_profiles(client)
     patch_overhaul_activation_flow(client)
     patch_overhaul_payments(client, rls)
+    patch_overhaul_only_runtime(client)
     patch_client_handshake(client)
     server = patch_server(args.careermp_server.read_text(encoding="utf-8-sig"))
     assert "careerModeHello" in server and "careerModeReady" in server
