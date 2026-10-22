@@ -27,12 +27,12 @@ jobs:
         run: |
           python scripts/check_careermp_040.py /tmp/careermp-source.zip
           python scripts/verify_careermp_040_server.py /tmp/careermp-039/Resources/Server/CareerMP/careerMP.lua
-      - name: Exercise experimental builder with source-only fixtures
+      - name: Exercise experimental builder with committed CareerMP archive
         run: |
           python scripts/build_release_040.py \
             --rls-original /tmp/rls-slim-source.zip \
-            --careermp-client /tmp/careermp-source.zip \
-            --careermp-server /tmp/careermp-039/Resources/Server/CareerMP/careerMP.lua \
+            --careermp-client Resources/Client/CareerMP.zip \
+            --careermp-server Resources/Server/CareerMP/careerMP.lua \
             --output /tmp/experimental-source-fixture \
             --resources-root Resources \
             --experimental
