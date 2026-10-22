@@ -25,9 +25,9 @@ def patch_server(source: str) -> str:
 \tend
 end'''
     new = '''-- CareerMP040 explicit game-mode negotiation
--- Legacy clients retain the original rxCareerSync flow. In Overhaul mode,
--- only careerModeReady acknowledges actual in-game activation.
-local supportedCareerModes = { vanilla = true, overhaul = true }
+-- This server requires RLS Overhaul mode; only careerModeReady confirms
+-- actual in-game activation. Legacy clients are not supported.
+local supportedCareerModes = { overhaul = true }
 
 function careerModeHello(player_id, data)
   local entry = pendingActivation[player_id]
@@ -62,12 +62,10 @@ end
 function careerSyncRequested(player_id)
   local entry = pendingActivation[player_id]
   if not entry then return end
+  if entry.mode ~= "overhaul" or entry.modeProtocol ~= 1 then return end
   MP.TriggerClientEventJson(player_id, "rxCareerSync", Config.client)
-  -- Older clients only support rxCareerSync; preserve their handshake.
-  -- A negotiated 0.40 client MUST report careerModeReady separately.
-  if not entry.modeProtocol then
-    entry.careerActive = true
-  end
+  -- No vanilla fallback: a successful sync is not an activated mode.
+  -- Negotiation and mode readiness must be confirmed separately.
 end'''
     if source.count(old) != 1:
         raise RuntimeError("CareerMP server activation handshake changed")
