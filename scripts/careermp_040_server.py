@@ -35,7 +35,7 @@ function careerModeHello(player_id, data)
   local ok, payload = pcall(Util.JsonDecode, data or "")
   if not ok or type(payload) ~= "table" or
      (payload.protocol ~= 1) or not supportedCareerModes[payload.mode] then
-    log("W", "CareerMP040", "Rejected invalid career mode hello from " .. tostring(player_id))
+    print("[CareerMP040] Rejected invalid career mode hello from " .. tostring(player_id))
     return
   end
   entry.mode = payload.mode
@@ -55,7 +55,7 @@ function careerModeReady(player_id, data)
     return
   end
   entry.careerActive = true
-  log("I", "CareerMP040", "Player " .. tostring(player_id) ..
+  print("[CareerMP040] Player " .. tostring(player_id) ..
       " activated " .. tostring(entry.mode) .. " career")
 end
 
