@@ -9,6 +9,7 @@ from pathlib import Path
 from build_release import read_zip_entries, read_careermp_entries
 from zip_utils import write_zip
 from rls_280_careermp import patch_rls_280_multiplayer
+from rls_280_vehicle_safety import patch_overhaul_mp_vehicle_safety
 from careermp_040 import stage_careermp_040, patch_careermp_040_overhaul_adapter, verify_rls_280_mode
 from careermp_040_handshake import patch_client_handshake
 from careermp_040_server import patch_server
@@ -30,6 +31,7 @@ def main() -> None:
     client = read_careermp_entries(args.careermp_client)
     verify_rls_280_mode(rls)
     patch_rls_280_multiplayer(rls)
+    patch_overhaul_mp_vehicle_safety(rls)
     stage_careermp_040(client)
     patch_careermp_040_overhaul_adapter(client)
     patch_client_handshake(client)
