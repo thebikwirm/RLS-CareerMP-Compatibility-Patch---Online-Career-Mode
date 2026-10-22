@@ -48,3 +48,9 @@ Verified from the committed 2.8.0 slim tree: `overhaul/shell/extensionManager.lu
 Added **staged only** `scripts/rls_280_careermp.py` to change the BeamMP career refusal narrowly: if the `careerMP_compat` extension is present and exposes `getCurrentProfile`, allow startup; otherwise preserve RLS's warning and refusal. It asserts the native 2.8.0 profile/inventory API without replacing the new modules. Added `scripts/verify_rls_280_careermp.py` for an offline idempotency and source regression check.
 
 **Not yet included in a ZIP or tested.** In particular, whether `careerMP_compat` has loaded when RLS checks the refusal, and whether CareerMP supports 0.40 at all, need runtime verification. This check does not make CareerMP 0.39 binary/Lua compatible with BeamNG 0.40.
+
+## CareerMP 0.40 preparation — source comparison
+
+Reviewed the public CareerMP 0.39 source in `vladmaksimenko-0/CareerMP-0.39` (the `compat.lua`, `careerPatches.lua`, and `careerMPEnabler.lua` modules). Its `compat.lua` wraps **vanilla** `career_saveSystem` and `career_career`, while the RLS 2.8 source provides distinct `overhaul_career_saveSystem` and `overhaul_career_career` implementations. Calling them interchangeable would be unsafe; we need to establish which module owns career activation, savings and remote vehicle cleanup in multiplayer.
+
+Added `scripts/careermp_040.py` for a narrow in-memory port preparation preserving both returns from the game save-profile API, and `scripts/check_careermp_040.py` to inspect a source ZIP for those hooks and print blockers. It deliberately retains `targetGameVersion = "0.39"` and **does not build** an installable 0.40 mod. Do not run the 0.39 release builder or deploy existing patches as an 0.40 port. Next development needs an actual BeamNG 0.40 CareerMP-enabler runtime path and baseline logs before changing version identifiers.
