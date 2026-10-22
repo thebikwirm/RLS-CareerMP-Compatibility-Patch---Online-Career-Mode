@@ -39,6 +39,8 @@ jobs:
                   for j in range(525, min(len(lines), 715)):
                       print(f"FULL {j+1}: {lines[j]}")
                   for i, line in enumerate(lines):
+                      if any(k in line for k in ("requestCareerSync", "rxCareerSync", "onExtensionLoaded", "onServerLeave", "AddEventHandler", "onWorldReadyState", "local function onUpdate", "careerSyncRequested", "careerMPActive = true", "syncRequested = false")):
+                          print("SIGNAL", i+1, " ".join(f"{j+1}:{lines[j]}" for j in range(max(0,i-2),min(len(lines),i+4))))
                       if "careerPatches" in line or "withRemoteVehiclesProtected" in line or "createOrLoadCareerAndStart(profileName" in line:
                           print("===== at", i+1, "=====")
                           print("\\n".join(f"{j+1}: {lines[j]}" for j in range(max(0,i-3),min(len(lines),i+6))))
