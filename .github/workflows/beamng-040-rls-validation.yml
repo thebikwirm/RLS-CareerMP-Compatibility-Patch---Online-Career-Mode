@@ -42,3 +42,24 @@ jobs:
           test -s /tmp/experimental-source-fixture/careermp_040_rls280_EXPERIMENTAL.zip
           test -s /tmp/experimental-source-fixture/careerMP_040_EXPERIMENTAL.lua
 
+
+      - name: Check deployment script and simulated server install
+        run: |
+          python -m py_compile scripts/deploy_server_040.py
+          mkdir -p /tmp/test-beammp/Resources/Client /tmp/test-beammp/Resources/Server
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+          server = Path("/tmp/test-beammp/Resources/Client/rls_career_overhaul_v2.8.0_beta.zip")
+          source = Path("/tmp/rls-slim-source.zip")
+          with zipfile.ZipFile(source) as zin, zipfile.ZipFile(server, "w") as zout:
+              for item in zin.infolist():
+                  if not item.is_dir():
+                      zout.writestr(item, zin.read(item.filename))
+              for n in range(12):
+                  zout.writestr(f"dummy/full-archive-marker-{n}.txt", "test")
+          PY
+          python scripts/deploy_server_040.py --server-root /tmp/test-beammp --build-root /tmp/experimental-source-fixture --patch-rls
+          test -s /tmp/test-beammp/Resources/Server/CareerMP/careerMP.lua
+          test -s /tmp/test-beammp/Resources/Client/CareerMP.zip
+          test -d /tmp/experimental-source-fixture/deployment-backups
