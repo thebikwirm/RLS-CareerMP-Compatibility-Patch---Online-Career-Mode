@@ -13,6 +13,10 @@ rem Also accept original inputs in the builds folder for convenience.
 if not exist "%RLS%" if exist "%BUILDROOT%\rls_career_overhaul_v2.8.0_beta.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_v2.8.0_beta.zip"
 if not exist "%CAREERMP%" if exist "%BUILDROOT%\CareerMP.zip" set "CAREERMP=%BUILDROOT%\CareerMP.zip"
 if not exist "%SERVER_LUA%" if exist "%BUILDROOT%\careerMP.lua" set "SERVER_LUA=%BUILDROOT%\careerMP.lua"
+rem Prefer a local mirror of the BeamMP server resources.
+if exist "%~dp0resources\Server\CareerMP\careerMP.lua" set "SERVER_LUA=%~dp0resources\Server\CareerMP\careerMP.lua"
+if exist "%~dp0Resources\Server\CareerMP\careerMP.lua" set "SERVER_LUA=%~dp0Resources\Server\CareerMP\careerMP.lua"
+
 rem Check the original CareerMP repository structure if present.
 if not exist "%SERVER_LUA%" if exist "%~dp0Resources\Server\CareerMP\careerMP.lua" set "SERVER_LUA=%~dp0Resources\Server\CareerMP\careerMP.lua"
 if not exist "%SERVER_LUA%" if exist "%~dp0upstream\CareerMP-0.39\Resources\Server\CareerMP\careerMP.lua" set "SERVER_LUA=%~dp0upstream\CareerMP-0.39\Resources\Server\CareerMP\careerMP.lua"
