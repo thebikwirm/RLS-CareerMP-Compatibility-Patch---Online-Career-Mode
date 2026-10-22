@@ -101,16 +101,16 @@ echo ==========================================
 echo.
 echo Outputs:
 echo   %BUILDROOT%\rls_2.8.0_careermp_040_PATCH_ONLY.zip
- echo   %BUILDROOT%\RLS-OVERLAY-ONLY\
- echo   %BUILDROOT%\Resources\Client\
- echo   %BUILDROOT%\Resources\Server\
+echo   %BUILDROOT%\RLS-OVERLAY-ONLY\
+echo   %BUILDROOT%\Resources\Client\
+echo   %BUILDROOT%\Resources\Server\
 echo   %BUILDROOT%\careermp_040_rls280_EXPERIMENTAL.zip
 echo   %BUILDROOT%\careerMP_040_EXPERIMENTAL.lua
 echo.
 echo IMPORTANT: RLS PATCH_ONLY is NOT a complete RLS mod.
-echo Apply its changed source files to a copy of your FULL RLS installation.
+echo Deployment patches the existing FULL server RLS ZIP after preflight.
 echo Back up your BeamNG and server saves before any testing.
-echo Server resources installed; backups saved in %BUILDROOT%\deployment-backups.
+echo Server resources installed; backups and manifest saved in %BUILDROOT%\deployment-backups.
 echo.
 pause
 exit /b 0
