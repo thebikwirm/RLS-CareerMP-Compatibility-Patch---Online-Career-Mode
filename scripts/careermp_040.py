@@ -48,3 +48,63 @@ def report_unported_040() -> list[str]:
         "Remote vehicle protection in careerPatches.lua requires 0.40 verification",
         "BeamMP 0.40 connection and Vue bootstrap require runtime testing",
     ]
+
+
+# RLS 2.8 has its own Overhaul gamestate ("overhaul"), and MUST start via
+# overhaul_shell_gameMode.start(). Do not call vanilla career_career as a
+# substitute or attempt to alias overhaul_career_career globally.
+RLS280_GAME_MODE = "lua/ge/extensions/overhaul/shell/gameMode.lua"
+RLS280_CONTEXT = "lua/ge/extensions/overhaul/lib/career/context.lua"
+
+def verify_rls_280_mode(entries: dict[str, bytes]) -> None:
+    for path in (RLS280_GAME_MODE, RLS280_CONTEXT):
+        if path not in entries:
+            raise RuntimeError("RLS 2.8 Overhaul mode source missing: " + path)
+    mode = entries[RLS280_GAME_MODE].decode("utf-8")
+    context = entries[RLS280_CONTEXT].decode("utf-8")
+    for required in (
+        'core_gamestate.setGameState("overhaul", "overhaul", nil)',
+        "function M.start(saveName, specificAutosave, startingOptions)",
+        "career.createOrLoadCareerAndStart(saveName, specificAutosave, startingOptions)",
+        'extensions.hook("onOverhaulModeStarted", saveName)',
+        "function M.stop()",
+        "function M.onOverhaulBeforeCareerActivate()",
+    ):
+        if required not in mode:
+            raise RuntimeError("RLS 2.8 game mode contract changed: " + required)
+    if 'function M.isOverhaulActive()' not in context:
+        raise RuntimeError("RLS 2.8 mode context check missing")
+
+
+def patch_careermp_040_overhaul_adapter(entries: dict[str, bytes]) -> None:
+    """Stage a 0.40 startup adapter only; other CareerMP modules still need porting.
+
+    Prefer RLS's dedicated mode when loaded, but keep vanilla fallback so a
+    CareerMP-only 0.40 session uses standard career. Do not mutate globals or
+    alter RLS gameMode.lua.
+    """
+    if COMPAT not in entries:
+        raise RuntimeError("CareerMP compat.lua missing")
+    source = entries[COMPAT].decode("utf-8").replace("\\r\\n", "\\n")
+    marker = "-- CareerMP040 RLS 2.8 dedicated game mode adapter"
+    if marker in source:
+        return
+    original = """function M.createOrLoadCareerAndStart(name, specificSaveFolder, startMode)
+\tlocal career = career_career"""
+    replacement = """function M.createOrLoadCareerAndStart(name, specificSaveFolder, startMode)
+\t-- CareerMP040 RLS 2.8 dedicated game mode adapter
+\t-- The Overhaul mode owns UI/game-state transitions; starting its career
+\t-- module directly leaves the mode/UI uninitialized.
+\tlocal mode = type(extensions) == "table" and rawget(extensions, "overhaul_shell_gameMode")
+\tif mode and type(mode.start) == "function" then
+\t\tlocal options = {startMode = startMode or M.defaultStartMode}
+\t\tlocal ok, reason = mode.start(name, specificSaveFolder, options)
+\t\tif not ok then
+\t\t\tlog("E", "careerMP.compat", "Overhaul career start failed: " .. tostring(reason))
+\t\tend
+\t\treturn ok
+\tend
+\tlocal career = career_career"""
+    if source.count(original) != 1:
+        raise RuntimeError("CareerMP career activation source layout changed")
+    entries[COMPAT] = source.replace(original, replacement, 1).encode("utf-8")
