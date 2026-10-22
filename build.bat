@@ -5,9 +5,14 @@ cd /d "%~dp0"
 rem BeamNG 0.40 / RLS 2.8 beta + CareerMP experimental builder.
 rem Never overwrite BeamMP.zip, installed mods, or server resources automatically.
 set "BUILDROOT=%~dp0built-040-experimental"
-set "RLS=%~dp0rls_career_overhaul_v2.8.0_beta.zip"
-set "CAREERMP=%~dp0CareerMP.zip"
-set "SERVER_LUA=%~dp0careerMP.lua"
+set "RLS=%~dp0Resources\Client\rls_career_overhaul_v2.8.0_beta.zip"
+set "CAREERMP=%~dp0Resources\Client\CareerMP.zip"
+set "SERVER_LUA=%~dp0Resources\Server\CareerMP\careerMP.lua"
+
+rem Prefer the committed Resources source tree; accept old root inputs as fallback.
+if not exist "%RLS%" if exist "%~dp0rls_career_overhaul_v2.8.0_beta.zip" set "RLS=%~dp0rls_career_overhaul_v2.8.0_beta.zip"
+if not exist "%CAREERMP%" if exist "%~dp0CareerMP.zip" set "CAREERMP=%~dp0CareerMP.zip"
+if not exist "%SERVER_LUA%" if exist "%~dp0careerMP.lua" set "SERVER_LUA=%~dp0careerMP.lua"
 
 rem Also accept original inputs in the builds folder for convenience.
 if not exist "%RLS%" if exist "%BUILDROOT%\rls_career_overhaul_v2.8.0_beta.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_v2.8.0_beta.zip"
@@ -75,6 +80,7 @@ python scripts\build_release_040.py ^
   --careermp-client "%CAREERMP%" ^
   --careermp-server "%SERVER_LUA%" ^
   --output "%BUILDROOT%" ^
+  --resources-root "%~dp0Resources" ^
   --experimental
 if errorlevel 1 goto :fail
 
@@ -84,10 +90,15 @@ echo  EXPERIMENTAL 0.40 BUILD COMPLETE
 echo ==========================================
 echo.
 echo Outputs:
-echo   %BUILDROOT%\rls_2.8.0_careermp_040_EXPERIMENTAL.zip
+echo   %BUILDROOT%\rls_2.8.0_careermp_040_PATCH_ONLY.zip
+ echo   %BUILDROOT%\RLS-OVERLAY-ONLY\
+ echo   %BUILDROOT%\Resources\Client\
+ echo   %BUILDROOT%\Resources\Server\
 echo   %BUILDROOT%\careermp_040_rls280_EXPERIMENTAL.zip
 echo   %BUILDROOT%\careerMP_040_EXPERIMENTAL.lua
 echo.
+echo IMPORTANT: RLS PATCH_ONLY is NOT a complete RLS mod.
+echo Apply its changed source files to a copy of your FULL RLS installation.
 echo Back up your BeamNG and server saves before any testing.
 echo No files have been installed.
 echo.
