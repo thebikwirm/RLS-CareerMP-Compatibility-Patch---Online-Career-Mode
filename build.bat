@@ -13,6 +13,22 @@ rem Also accept original inputs in the builds folder for convenience.
 if not exist "%RLS%" if exist "%BUILDROOT%\rls_career_overhaul_v2.8.0_beta.zip" set "RLS=%BUILDROOT%\rls_career_overhaul_v2.8.0_beta.zip"
 if not exist "%CAREERMP%" if exist "%BUILDROOT%\CareerMP.zip" set "CAREERMP=%BUILDROOT%\CareerMP.zip"
 if not exist "%SERVER_LUA%" if exist "%BUILDROOT%\careerMP.lua" set "SERVER_LUA=%BUILDROOT%\careerMP.lua"
+rem Check the original CareerMP repository structure if present.
+if not exist "%SERVER_LUA%" if exist "%~dp0Resources\Server\CareerMP\careerMP.lua" set "SERVER_LUA=%~dp0Resources\Server\CareerMP\careerMP.lua"
+if not exist "%SERVER_LUA%" if exist "%~dp0upstream\CareerMP-0.39\Resources\Server\CareerMP\careerMP.lua" set "SERVER_LUA=%~dp0upstream\CareerMP-0.39\Resources\Server\CareerMP\careerMP.lua"
+
+rem Fetch the upstream SOURCE only if no local copy exists.
+rem Never fetch directly into a deployed server or overwrite its configuration.
+if not exist "%SERVER_LUA%" (
+  if not exist "%BUILDROOT%" mkdir "%BUILDROOT%"
+  echo Original CareerMP server Lua not found. Fetching source from GitHub...
+  curl.exe -fL --retry 2 --connect-timeout 15 ^
+    "https://raw.githubusercontent.com/vladmaksimenko-0/CareerMP-0.39/main/Resources/Server/CareerMP/careerMP.lua" ^
+    -o "%BUILDROOT%\careerMP_upstream.lua"
+  if errorlevel 1 goto :server_fetch_fail
+  if not exist "%BUILDROOT%\careerMP_upstream.lua" goto :server_fetch_fail
+  set "SERVER_LUA=%BUILDROOT%\careerMP_upstream.lua"
+)
 
 if not exist "%RLS%" (
   echo Missing original RLS 2.8.0 beta ZIP:
@@ -25,8 +41,7 @@ if not exist "%CAREERMP%" (
   goto :fail
 )
 if not exist "%SERVER_LUA%" (
-  echo Missing original CareerMP server Lua:
-  echo   %SERVER_LUA%
+  echo Missing CareerMP server Lua after local search and attempted download.
   goto :fail
 )
 
@@ -74,6 +89,12 @@ echo No files have been installed.
 echo.
 pause
 exit /b 0
+
+:server_fetch_fail
+echo.
+echo Download failed. Check network access or place the original careerMP.lua
+echo in the repository root, then run build.bat again.
+goto :fail
 
 :fail
 echo.
