@@ -3,8 +3,9 @@ setlocal
 cd /d "%~dp0"
 
 rem BeamNG 0.40 / RLS 2.8 beta + CareerMP experimental builder.
-rem Never overwrite BeamMP.zip, installed mods, or server resources automatically.
+rem Server deployment backs up replaced files; installed BeamMP remains untouched.
 set "BUILDROOT=%~dp0built-040-experimental"
+set "SERVER=D:\beamng_server"
 set "RLS=%~dp0Resources\Client\rls_career_overhaul_v2.8.0_beta.zip"
 set "CAREERMP=%~dp0Resources\Client\CareerMP.zip"
 set "SERVER_LUA=%~dp0Resources\Server\CareerMP\careerMP.lua"
@@ -61,7 +62,7 @@ echo CareerMP server:  %SERVER_LUA%
 echo Output directory: %BUILDROOT%
 echo.
 echo This is a source-validated but NOT in-game-tested experimental build.
-echo Files will NOT be installed automatically.
+echo Server deployment follows only if build succeeds.
 echo.
 
 rem The standalone RLS verifiers audit the separate upstream/rls_2.8.0_slim
@@ -85,6 +86,16 @@ if errorlevel 1 goto :fail
 
 echo.
 echo ==========================================
+echo  DEPLOYING TO %SERVER%
+echo ==========================================
+python scripts\deploy_server_040.py ^
+  --server-root "%SERVER%" ^
+  --build-root "%BUILDROOT%" ^
+  --patch-rls
+if errorlevel 1 goto :deploy_fail
+
+echo.
+echo ==========================================
 echo  EXPERIMENTAL 0.40 BUILD COMPLETE
 echo ==========================================
 echo.
@@ -99,10 +110,18 @@ echo.
 echo IMPORTANT: RLS PATCH_ONLY is NOT a complete RLS mod.
 echo Apply its changed source files to a copy of your FULL RLS installation.
 echo Back up your BeamNG and server saves before any testing.
-echo No files have been installed.
+echo Server resources installed; backups saved in %BUILDROOT%\deployment-backups.
 echo.
 pause
 exit /b 0
+
+:deploy_fail
+echo.
+echo ==========================================
+echo  DEPLOYMENT FAILED - CHECK BACKUPS
+echo ==========================================
+pause
+exit /b 1
 
 :server_fetch_fail
 echo.
