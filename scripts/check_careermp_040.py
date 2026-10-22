@@ -8,7 +8,7 @@ import argparse
 import sys
 from pathlib import Path
 from zipfile import ZipFile
-from careermp_040 import COMPAT, ENABLER, PATCHES, stage_careermp_040, report_unported_040
+from careermp_040 import COMPAT, ENABLER, PATCHES, stage_careermp_040, patch_careermp_040_overhaul_adapter, report_unported_040
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -23,7 +23,9 @@ def main() -> int:
                 raise SystemExit(f"Expected exactly one {required}; got {matching}")
             entries[required] = archive.read(matching[0])
     stage_careermp_040(entries)
-    print("PASS: CareerMP 0.39 baseline and safe Lua multi-return fix validated.")
+    patch_careermp_040_overhaul_adapter(entries)
+    assert 'overhaul_shell_gameMode' in entries[COMPAT].decode('utf-8')
+    print("PASS: CareerMP multi-return fix and staged Overhaul game-mode adapter validated.")
     print("RELEASE BLOCKED: BeamNG 0.40 / RLS 2.8 integration not yet confirmed.")
     for blocker in report_unported_040():
         print(" - " + blocker)
