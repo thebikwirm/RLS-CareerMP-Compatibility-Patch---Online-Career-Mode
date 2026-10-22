@@ -105,8 +105,8 @@ end"""
     replacement = """function M.createOrLoadCareerAndStart(name, specificSaveFolder, startMode)
 \t-- CareerMP040 RLS 2.8 dedicated game mode adapter (Overhaul-only)
 \tlocal mode = type(extensions) == "table" and rawget(extensions, "overhaul_shell_gameMode")
-\tif not (mode and type(mode.start) == "function") then
-\t\tlog("E", "careerMP.compat", "RLS 2.8 game mode missing; no vanilla fallback")
+\tif not (mode and type(mode.start) == "function" and mode.careerMPVehicleSafety == true) then
+\t\tlog("E", "careerMP.compat", "RLS 2.8 game mode or multiplayer vehicle safety patch missing")
 \t\treturn false
 \tend
 \tlocal ok, reason = mode.start(name, specificSaveFolder, {
