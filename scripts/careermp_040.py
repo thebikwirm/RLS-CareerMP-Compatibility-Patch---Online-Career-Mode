@@ -89,21 +89,34 @@ def patch_careermp_040_overhaul_adapter(entries: dict[str, bytes]) -> None:
     if marker in source:
         return
     original = """function M.createOrLoadCareerAndStart(name, specificSaveFolder, startMode)
-\tlog("E", "careerMP.compat", "RLS 2.8 game mode missing; no vanilla fallback")\n\treturn false"""
-    replacement = """function M.createOrLoadCareerAndStart(name, specificSaveFolder, startMode)
-\t-- CareerMP040 RLS 2.8 dedicated game mode adapter
-\t-- The Overhaul mode owns UI/game-state transitions; starting its career
-\t-- module directly leaves the mode/UI uninitialized.
-\tlocal mode = type(extensions) == "table" and rawget(extensions, "overhaul_shell_gameMode")
-\tif mode and type(mode.start) == "function" then
-\t\tlocal options = {startMode = startMode or M.defaultStartMode}
-\t\tlocal ok, reason = mode.start(name, specificSaveFolder, options)
-\t\tif not ok then
-\t\t\tlog("E", "careerMP.compat", "Overhaul career start failed: " .. tostring(reason))
-\t\tend
-\t\treturn ok
+\tlocal career = career_career
+\tif not career or type(career.createOrLoadCareerAndStart) ~= "function" then
+\t\tlog("E", "careerMP.compat", "career_career.createOrLoadCareerAndStart missing")
+\t\treturn false
 \tend
-\tlocal career = career_career"""
+\tif M.usesStartingOptions() then
+\t\treturn career.createOrLoadCareerAndStart(name, specificSaveFolder, {
+\t\t\tstartMode = startMode or M.defaultStartMode,
+\t\t})
+\tend
+\t-- 0.38 and older: third arg was the tutorial flag; never enable it in MP.
+\treturn career.createOrLoadCareerAndStart(name, specificSaveFolder, false)
+end"""
+    replacement = """function M.createOrLoadCareerAndStart(name, specificSaveFolder, startMode)
+\t-- CareerMP040 RLS 2.8 dedicated game mode adapter (Overhaul-only)
+\tlocal mode = type(extensions) == "table" and rawget(extensions, "overhaul_shell_gameMode")
+\tif not (mode and type(mode.start) == "function") then
+\t\tlog("E", "careerMP.compat", "RLS 2.8 game mode missing; no vanilla fallback")
+\t\treturn false
+\tend
+\tlocal ok, reason = mode.start(name, specificSaveFolder, {
+\t\tstartMode = startMode or M.defaultStartMode,
+\t})
+\tif not ok then
+\t\tlog("E", "careerMP.compat", "Overhaul career start failed: " .. tostring(reason))
+\tend
+\treturn ok
+end"""
     if source.count(original) != 1:
         raise RuntimeError("CareerMP career activation source layout changed")
     entries[COMPAT] = source.replace(original, replacement, 1).encode("utf-8")
