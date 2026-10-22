@@ -40,3 +40,11 @@ The uploaded `rls_career_overhaul_v2.8.0_beta.zip` could not be opened by the cu
 1. Compare CareerMP's entrypoint and profile APIs against the new `overhaul/career/` modules and native BeamNG 0.40 interfaces.
 2. Implement a dedicated, opt-in 0.40 build path using original 2.8.0 ZIP and only version-specific patches, never the legacy 2.6.7/2.7.2 overlays.
 3. Check BeamMP's updated Vue/bootstrap behaviour against the new `bngRoutes` API and test connection/UI before adding further patches.
+
+## CareerMP source port — first staged change (2026-10-22)
+
+Verified from the committed 2.8.0 slim tree: `overhaul/shell/extensionManager.lua` explicitly blocks career startup whenever BeamMP is active (`refuseCareerStart()`), even though its startup targets BeamNG minor version 40. `overhaul/career/saveSystem.lua` exposes `getCurrentProfile()` and the legacy alias, returning profile plus path; inventory lives under `overhaul/career/garage/inventory.lua` and exports vehicle ID lookups and spawn via `parts`.
+
+Added **staged only** `scripts/rls_280_careermp.py` to change the BeamMP career refusal narrowly: if the `careerMP_compat` extension is present and exposes `getCurrentProfile`, allow startup; otherwise preserve RLS's warning and refusal. It asserts the native 2.8.0 profile/inventory API without replacing the new modules. Added `scripts/verify_rls_280_careermp.py` for an offline idempotency and source regression check.
+
+**Not yet included in a ZIP or tested.** In particular, whether `careerMP_compat` has loaded when RLS checks the refusal, and whether CareerMP supports 0.40 at all, need runtime verification. This check does not make CareerMP 0.39 binary/Lua compatible with BeamNG 0.40.
