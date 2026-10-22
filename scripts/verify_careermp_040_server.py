@@ -16,11 +16,12 @@ def main():
     assert patched != source
     assert patch_server(patched) == patched
     for marker in ("careerModeHello", "careerModeReady", "rxCareerModeConfig",
-                   'payload.mode ~= entry.mode', 'if not entry.modeProtocol then',
+                   'payload.mode ~= entry.mode', 'if entry.mode ~= "overhaul" or entry.modeProtocol ~= 1 then return end',
                    'entry.careerActive = false', 'local supportedCareerModes = { overhaul = true }',
                    'entry.mode ~= "overhaul"'):
         assert marker in patched, marker
     assert 'MP.RegisterEvent("careerSyncRequested","careerSyncRequested")' in patched
+    assert "autoUpdate = false," in patched
     print("PASS: staged Overhaul-only server negotiation verified")
     print("NOT tested with BeamMP; client must negotiate before sync and signal actual mode readiness.")
 
