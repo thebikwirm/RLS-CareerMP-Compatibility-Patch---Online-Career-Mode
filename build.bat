@@ -64,12 +64,11 @@ echo This is a source-validated but NOT in-game-tested experimental build.
 echo Files will NOT be installed automatically.
 echo.
 
-python scripts\verify_rls_280_source.py
-if errorlevel 1 goto :fail
-python scripts\verify_rls_280_careermp.py
-if errorlevel 1 goto :fail
-python scripts\verify_rls_280_integration.py
-if errorlevel 1 goto :fail
+rem The standalone RLS verifiers audit the separate upstream/rls_2.8.0_slim
+rem checkout, which may not match the actual ZIP under Resources/Client.
+rem The build_release_040.py process strictly checks and patches the input
+rem RLS ZIP itself; a changed or unsupported guard will still fail safely.
+echo Validating the selected Resources input archives...
 python scripts\check_careermp_040.py "%CAREERMP%"
 if errorlevel 1 goto :fail
 python scripts\verify_careermp_040_server.py "%SERVER_LUA%"
