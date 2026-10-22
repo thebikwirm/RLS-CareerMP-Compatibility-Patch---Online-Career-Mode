@@ -5,6 +5,7 @@ Patch the exact 2.8.0 shell source in a future opt-in builder; never copy the
 This is an experimental source patch, not proof of in-game compatibility.
 """
 from __future__ import annotations
+import re
 
 SHELL = "lua/ge/extensions/overhaul/shell/extensionManager.lua"
 SAVE = "lua/ge/extensions/overhaul/career/saveSystem.lua"
@@ -31,9 +32,20 @@ def patch_rls_280_multiplayer(entries: dict[str, bytes]) -> None:
             raise RuntimeError("Missing RLS 2.8.0 compatibility source: " + path)
     shell = entries[SHELL].decode("utf-8")
     if "CareerMP040: only waive the BeamMP block" not in shell:
-        if shell.count(OLD) != 1:
-            raise RuntimeError("RLS 2.8.0 BeamMP refusal changed; review before patching")
-        shell = shell.replace(OLD, NEW, 1)
+        # Whitespace can vary across slim exports and checked-out files.
+        # Match the explicit BeamMP gate and warning as a single unit;
+        # do not remove the version check, warning, or standalone refusal.
+        pattern = re.compile(
+            r'^[ \\t]*if not isBeamMPActive\\(\\) then return false end[ \\t]*\\n'
+            r'[ \\t]*log\\("W",\\s*"extensionManager",\\s*"BeamMP is active; Career Overhaul cannot start until it is disabled"\\)',
+            re.MULTILINE,
+        )
+        shell, count = pattern.subn(lambda _: NEW, shell)
+        if count != 1:
+            raise RuntimeError(
+                f"RLS 2.8.0 BeamMP refusal differs from audited source (matches={count}); "
+                "check upstream/rls_2.8.0_slim or restore it from git. Refusing unsafe patch."
+            )
         entries[SHELL] = shell.encode("utf-8")
     if "SUPPORTED_GAME_MINOR_VERSION = 40" not in shell:
         raise RuntimeError("Expected RLS 2.8.0 shell game version check missing")
