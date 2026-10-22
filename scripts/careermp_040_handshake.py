@@ -49,13 +49,16 @@ end
     # recovery request. Route BOTH through mode negotiation before sync.
     if 'local function requestCareerSync(reason)' in source:
         old = 'TriggerServerEvent("careerSyncRequested", "")'
-        if source.count(old) != 2:
-            raise RuntimeError("Custom CareerMP sync event call sites changed")
-        # The worker recovery path must also negotiate instead of bypassing.
-        source = source.replace(
+        # The inserted rxCareerModeConfig handler contains the one *allowed*
+        # careerSyncRequested send; do not replace that server-response step.
+        pre, post = source.split("local function rxCareerSync(data)", 1)
+        if post.count(old) != 2:
+            raise RuntimeError(f"Custom CareerMP sync event call sites changed (found {post.count(old)})")
+        post = post.replace(
             old,
             'TriggerServerEvent("careerModeHello", jsonEncode({ protocol = 1, mode = "overhaul" }))',
         )
+        source = pre + "local function rxCareerSync(data)" + post
         hook = '\\tAddEventHandler("rxCareerSync", rxCareerSync)'
         if source.count(hook) != 1:
             raise RuntimeError("Custom CareerMP event registry changed")
