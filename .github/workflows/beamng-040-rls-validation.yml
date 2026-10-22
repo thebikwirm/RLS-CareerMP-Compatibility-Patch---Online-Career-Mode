@@ -1,0 +1,42 @@
+name: BeamNG 0.40 RLS 2.8 source validation
+on:
+  push:
+    branches: [beamng-0.40-careermp]
+  workflow_dispatch:
+
+jobs:
+  staged-source-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check RLS 2.8 source contracts
+        run: |
+          python scripts/verify_rls_280_source.py
+          python scripts/verify_rls_280_careermp.py
+          python scripts/verify_rls_280_integration.py
+      - name: Fetch public CareerMP 0.39 baseline for source compatibility
+        run: git clone --depth=1 https://github.com/vladmaksimenko-0/CareerMP-0.39.git /tmp/careermp-039
+      - name: Prepare source-only ZIP fixtures
+        run: |
+          (cd /tmp/careermp-039/Resources/Client/CareerMP && zip -qr /tmp/careermp-source.zip .)
+          (cd upstream/rls_2.8.0_slim && zip -qr /tmp/rls-slim-source.zip .)
+      - name: Check CareerMP source and server handshake
+        run: |
+          python scripts/check_careermp_040.py /tmp/careermp-source.zip
+          python scripts/verify_careermp_040_server.py /tmp/careermp-039/Resources/Server/CareerMP/careerMP.lua
+      - name: Exercise experimental builder with source-only fixtures
+        run: |
+          python scripts/build_release_040.py \
+            --rls-original /tmp/rls-slim-source.zip \
+            --careermp-client /tmp/careermp-source.zip \
+            --careermp-server /tmp/careermp-039/Resources/Server/CareerMP/careerMP.lua \
+            --output /tmp/experimental-source-fixture \
+            --experimental
+      - name: Check output artifact structure (source fixtures not playable)
+        run: |
+          test -s /tmp/experimental-source-fixture/rls_2.8.0_careermp_040_EXPERIMENTAL.zip
+          test -s /tmp/experimental-source-fixture/careermp_040_rls280_EXPERIMENTAL.zip
+          test -s /tmp/experimental-source-fixture/careerMP_040_EXPERIMENTAL.lua
