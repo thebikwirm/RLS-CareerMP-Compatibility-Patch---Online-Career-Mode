@@ -68,7 +68,7 @@ Other audit docs:
 
 1. Check latest branch and read current `build.bat`, `scripts/build_release_040.py`, CI and source files; keep working on `beamng-0.40-careermp`.
 2. Implement **safe automatic copying to `D:\beamng_server\Resources\Server` and `Resources\Client`** similar to old 0.39 one-click build. Back up destination files before replacing; never overwrite the user's save data, working server configs, or updated BeamMP. Consider opt-in switch for install, and an output manifest listing what changed.
-3. Handle **RLS full-mod patching** carefully: current uploaded `Resources/Client/rls_career_overhaul_v2.8.0_beta.zip` is slim and must not replace full installed mod. Merge overlay onto full RLS ZIP (or copy relevant patched files into exploded full mod if that's the installation layout), not the slim archive. Back up and fail closed if target/contents mismatch. The full RLS target path is not yet verified.
+3. The deployer now merges changed files into a full installed RLS ZIP, validating entry existence and ZIP integrity. Still verify the actual full RLS installation location and inspect archive/source compatibility; only path/entry matching is enforced, not an upstream-version fingerprint. Exploded RLS installations are not supported yet.
 4. Expand port for RLS-native inventory, garage, repair/tuning, insurance, shared vehicles, banking and phone routing. Validate with current BeamMP and BeamNG 0.40 live logs.
 5. For first live test use disposable profiles and two players; joining second player must not delete first player's car.
 
