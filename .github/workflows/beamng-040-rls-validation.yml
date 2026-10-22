@@ -36,7 +36,7 @@ jobs:
               print("Enabler entries:", names)
               for n in names:
                   lines = z.read(n).decode("utf-8-sig").splitlines()
-                  for i, line in enumerate(lines):
+                  for j in range(525, min(len(lines), 715)):\n                      print(f"FULL {j+1}: {lines[j]}")\n                  for i, line in enumerate(lines):
                       if "careerPatches" in line or "withRemoteVehiclesProtected" in line or "createOrLoadCareerAndStart(profileName" in line:
                           print("===== at", i+1, "=====")
                           print("\\n".join(f"{j+1}: {lines[j]}" for j in range(max(0,i-3),min(len(lines),i+6))))
