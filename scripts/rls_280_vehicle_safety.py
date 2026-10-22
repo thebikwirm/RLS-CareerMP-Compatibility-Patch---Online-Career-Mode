@@ -6,6 +6,7 @@ Guard only those two under a live CareerMP compatibility extension.
 from __future__ import annotations
 
 TRANSITIONS = "lua/ge/extensions/overhaul/career/start/transitions.lua"
+GAME_MODE = "lua/ge/extensions/overhaul/shell/gameMode.lua"
 
 def patch_overhaul_mp_vehicle_safety(entries: dict[str, bytes]) -> None:
     if TRANSITIONS not in entries:
@@ -43,3 +44,11 @@ def patch_overhaul_mp_vehicle_safety(entries: dict[str, bytes]) -> None:
     if source.count(old) != 1:
         raise RuntimeError("RLS 2.8 vehicle removal implementation changed: review safety")
     entries[TRANSITIONS] = source.replace(old, new, 1).encode("utf-8")
+    if GAME_MODE not in entries:
+        raise RuntimeError("Missing RLS 2.8 game mode; cannot advertise vehicle safety")
+    mode = entries[GAME_MODE].decode("utf-8")
+    if "M.careerMPVehicleSafety = true" not in mode:
+        if mode.count("local M = {}") != 1:
+            raise RuntimeError("RLS game-mode structure changed")
+        mode = mode.replace("local M = {}", "local M = {}\\nM.careerMPVehicleSafety = true", 1)
+        entries[GAME_MODE] = mode.encode("utf-8")
