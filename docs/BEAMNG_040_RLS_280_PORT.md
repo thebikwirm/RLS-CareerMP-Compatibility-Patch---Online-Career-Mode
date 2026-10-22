@@ -90,3 +90,15 @@ python scripts/build_release_040.py --rls-original "C:\\path\\rls_career_overhau
 Outputs are in `built-040-experimental/`. The builder and generated ZIPs **have not been executed or tested** here, since the file execution environment was unavailable. Even if it builds, DO NOT use the output on a valuable save or a production server; experimental code may fail or conflict with BeamNG/BeamMP. Before live testing, run offline validation, and back up BeamNG user saves and mod/server folders.
 
 **Critical remaining checks before a safe playable build:** verify the RLS 2.8 full ZIP matches slim file layout; confirm the redesigned RLS shell loads at the correct stage; ensure the CareerMP client activation guard and its vanilla career patches do not interfere with Overhaul; port CareerMP save/profile calls to `overhaul_career_saveSystem`; review all other player vehicle cleanup paths; validate the new protocol and multiplayer connection using current BeamMP; check UI/phone routing and reconnects. These remain blockers, not completed tasks.
+
+## Current implementation checkpoint
+
+Further client-side work in this branch:
+
+- `scripts/careermp_040_profiles.py` rewrites only CareerMP's profile adapter to use `overhaul_career_saveSystem` rather than vanilla `career_saveSystem`. No RLS save module is overwritten.
+- `scripts/careermp_040_enabler.py` replaces vanilla CareerMP career-activation protection with a fail-closed requirement for the patched RLS mode. The matching RLS safety patch now advertises `overhaul_shell_gameMode.careerMPVehicleSafety = true`.
+- `scripts/careermp_040.py` replaces the full vanilla start function with an RLS-only wrapper (avoiding invalid Lua flow from partial replacement).
+- The experimental builder applies the RLS activation safety flag, server handshake, client handshake, Overhaul save routing, and Overhaul-only activation code. The stageable server script disables the auto-update *default*. An existing server `config.json` may still set `server.autoUpdate=true`; this must be switched off before testing so patched Lua isn't overwritten.
+- `scripts/verify_rls_280_integration.py` verifies RLS source patch idempotency and that unrelated RLS career/save/inventory modules are untouched; `scripts/verify_careermp_040_server.py` verifies server mode negotiation. They have not been executed in the current environment.
+
+**Status: experimental build recipe exists, but no verified build artifacts or clean multiplayer tests exist.** A test on a disposable profile can be planned after local ZIP generation and script checks pass. The generated files are NOT production-safe and may need follow-up patches. Keep BeamMP up to date; do not overwrite its normal package with historical 0.39 files.
