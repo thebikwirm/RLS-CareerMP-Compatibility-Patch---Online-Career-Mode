@@ -92,6 +92,18 @@ def main() -> None:
     critical = staged / "Server" / "CareerMP" / "careerMP.lua"
     if not critical.is_file() or "careerModeHello" not in critical.read_text(encoding="utf-8"):
         parser.error("Patched CareerMP server script not found")
+    if args.patch_rls:
+        rls_archive = server / "Resources" / "Client" / RLS_NAME
+        overlay = args.build_root / "RLS-OVERLAY-ONLY"
+        if not rls_archive.is_file():
+            parser.error(f"Full RLS ZIP missing on server: {rls_archive}")
+        with zipfile.ZipFile(rls_archive) as z:
+            overlay_names = {p.relative_to(overlay).as_posix() for p in overlay.rglob("*") if p.is_file()} if overlay.is_dir() else set()
+            missing = overlay_names.difference(z.namelist())
+            if not overlay_names or missing:
+                parser.error(f"RLS overlay doesn't match server ZIP; missing entries: {sorted(missing)[:10]}")
+            if len(z.namelist()) <= len(overlay_names) + 5:
+                parser.error("Installed RLS ZIP looks slim, not complete; refusing to replace it")
     backup = (args.build_root / "deployment-backups" / datetime.now().strftime("%Y%m%d-%H%M%S-%f")).resolve()
     print(f"Installing {len(client_files)} client ZIP(s), {len(server_files)} server Lua file(s).")
     print(f"Backup directory: {backup}")
