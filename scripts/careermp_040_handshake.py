@@ -45,6 +45,49 @@ end
     if source.count(anchor) != 1:
         raise RuntimeError("CareerMP sync handler anchor changed")
     source = source.replace(anchor, prelude + anchor, 1)
+    # User-provided CareerMP.zip employs requestCareerSync(), plus a jobsystem
+    # recovery request. Route BOTH through mode negotiation before sync.
+    if 'local function requestCareerSync(reason)' in source:
+        old = 'TriggerServerEvent("careerSyncRequested", "")'
+        if source.count(old) != 2:
+            raise RuntimeError("Custom CareerMP sync event call sites changed")
+        # The worker recovery path must also negotiate instead of bypassing.
+        source = source.replace(
+            old,
+            'TriggerServerEvent("careerModeHello", jsonEncode({ protocol = 1, mode = "overhaul" }))',
+        )
+        hook = '\\tAddEventHandler("rxCareerSync", rxCareerSync)'
+        if source.count(hook) != 1:
+            raise RuntimeError("Custom CareerMP event registry changed")
+        source = source.replace(hook, '\\tAddEventHandler("rxCareerModeConfig", rxCareerModeConfig)\\n' + hook, 1)
+        tick = '''local function onUpdate(dtReal, dtSim, dtRaw)
+\\tprocessPendingCareerStart(dtReal)'''
+        if source.count(tick) != 1:
+            raise RuntimeError("Custom CareerMP update callback changed")
+        source = source.replace(tick, '''local function onUpdate(dtReal, dtSim, dtRaw)
+  sendOverhaulReady()
+\\tprocessPendingCareerStart(dtReal)''', 1)
+        leave = '''\\tcareerMPActive = false
+\\tsyncRequested = false'''
+        if source.count(leave) != 1:
+            raise RuntimeError("Custom CareerMP disconnect state changed")
+        source = source.replace(leave, '''\\tcareerMPActive = false
+\\tsyncRequested = false
+  modeConfirmed = false
+  modeReadySent = false''', 1)
+        sync = '''local function rxCareerSync(data)
+\\tclientConfig = jsonDecode(data)'''
+        if source.count(sync) != 1:
+            raise RuntimeError("Custom CareerMP rxCareerSync changed")
+        source = source.replace(sync, '''local function rxCareerSync(data)
+  if not modeConfirmed then
+    log("E", logTag, "Ignoring sync before RLS Overhaul mode negotiation")
+    return
+  end
+\\tclientConfig = jsonDecode(data)''', 1)
+        entries[CLIENT] = source.encode("utf-8")
+        return
+
     old = '''\t\tTriggerServerEvent("careerSyncRequested", "")
 \t\tsyncRequested = true'''
     new = '''\t\tTriggerServerEvent("careerModeHello", jsonEncode({ protocol = 1, mode = "overhaul" }))
