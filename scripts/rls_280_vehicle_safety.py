@@ -50,5 +50,5 @@ def patch_overhaul_mp_vehicle_safety(entries: dict[str, bytes]) -> None:
     if "M.careerMPVehicleSafety = true" not in mode:
         if mode.count("local M = {}") != 1:
             raise RuntimeError("RLS game-mode structure changed")
-        mode = mode.replace("local M = {}", "local M = {}\\nM.careerMPVehicleSafety = true", 1)
+        mode = mode.replace("local M = {}", "local M = {}\nM.careerMPVehicleSafety = true", 1)
         entries[GAME_MODE] = mode.encode("utf-8")
