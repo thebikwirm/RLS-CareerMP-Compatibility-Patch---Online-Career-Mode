@@ -15,7 +15,7 @@ def patch_overhaul_only_runtime(entries: dict[str, bytes]) -> None:
     marker = "-- CareerMP040 disable legacy vanilla career runtime wrappers"
     if marker in source:
         return
-    anchor = 'local logTag = "careerMP.patches"'
+    anchor = 'local M = {}'
     if source.count(anchor) != 1:
         raise RuntimeError("CareerMP runtime patcher source changed")
     source = source.replace(anchor, anchor + '\n' + marker, 1)
