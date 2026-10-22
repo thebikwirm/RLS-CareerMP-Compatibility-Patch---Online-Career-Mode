@@ -70,4 +70,9 @@ end'''
     if source.count(old) != 1:
         raise RuntimeError("CareerMP server activation handshake changed")
     source = source.replace(old, new, 1)
+    # Do not allow the default upstream updater to replace our experimental
+    # server code. Existing user config.json can override the default.
+    if source.count("autoUpdate = true,") != 1:
+        raise RuntimeError("CareerMP server autoUpdate default changed")
+    source = source.replace("autoUpdate = true,", "autoUpdate = false,", 1)
     return source
