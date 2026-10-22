@@ -36,8 +36,8 @@ def patch_rls_280_multiplayer(entries: dict[str, bytes]) -> None:
         # Match the explicit BeamMP gate and warning as a single unit;
         # do not remove the version check, warning, or standalone refusal.
         pattern = re.compile(
-            r'^[ \\t]*if not isBeamMPActive\\(\\) then return false end[ \\t]*\\n'
-            r'[ \\t]*log\\("W",\\s*"extensionManager",\\s*"BeamMP is active; Career Overhaul cannot start until it is disabled"\\)',
+            r'^[ \t]*if not isBeamMPActive\(\) then return false end[ \t]*\n'
+            r'[ \t]*log\("W",\s*"extensionManager",\s*"BeamMP is active; Career Overhaul cannot start until it is disabled"\)',
             re.MULTILINE,
         )
         shell, count = pattern.subn(lambda _: NEW, shell)
