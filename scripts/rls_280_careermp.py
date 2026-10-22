@@ -15,14 +15,17 @@ INVENTORY = "lua/ge/extensions/overhaul/career/garage/inventory.lua"
 OLD = '''  if not isBeamMPActive() then return false end
   log("W", "extensionManager", "BeamMP is active; Career Overhaul cannot start until it is disabled")'''
 NEW = '''  if not isBeamMPActive() then return false end
-  -- CareerMP040: only waive the BeamMP block when its multiplayer career
-  -- compatibility extension is actually available. Never disable the normal
-  -- BeamMP warning for players without CareerMP.
-  local cmp = type(extensions) == "table" and rawget(extensions, "careerMP_compat")
-    or rawget(_G, "careerMP_compat")
-  if type(cmp) == "table" and type(cmp.getCurrentProfile) == "function" then
-    log("I", "RLSCareerMP040", "CareerMP bridge found; allowing BeamMP career startup")
-    return false
+  -- CareerMP040: permit BeamMP only after this client's Overhaul-only
+  -- session was explicitly negotiated with the CareerMP server.
+  -- The generic careerMP_compat extension can unload during transitions,
+  -- and its presence alone does not prove multiplayer mode was accepted.
+  local enabler = type(extensions) == "table" and rawget(extensions, "careerMPEnabler")
+  if type(enabler) == "table" and type(enabler.isOverhaulModeNegotiated) == "function" then
+    local ok, negotiated = pcall(enabler.isOverhaulModeNegotiated)
+    if ok and negotiated == true then
+      log("I", "RLSCareerMP040", "Negotiated Overhaul session; allowing BeamMP career startup")
+      return false
+    end
   end
   log("W", "extensionManager", "BeamMP is active; Career Overhaul cannot start until it is disabled")'''
 
@@ -31,7 +34,7 @@ def patch_rls_280_multiplayer(entries: dict[str, bytes]) -> None:
         if path not in entries:
             raise RuntimeError("Missing RLS 2.8.0 compatibility source: " + path)
     shell = entries[SHELL].decode("utf-8")
-    if "CareerMP040: only waive the BeamMP block" not in shell:
+    if "CareerMP040: permit BeamMP only after this client's Overhaul-only" not in shell:
         # Whitespace can vary across slim exports and checked-out files.
         # Match the explicit BeamMP gate and warning as a single unit;
         # do not remove the version check, warning, or standalone refusal.
