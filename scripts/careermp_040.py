@@ -77,15 +77,14 @@ def verify_rls_280_mode(entries: dict[str, bytes]) -> None:
 
 
 def patch_careermp_040_overhaul_adapter(entries: dict[str, bytes]) -> None:
-    """Stage a 0.40 startup adapter only; other CareerMP modules still need porting.
+    """Stage the RLS-only 0.40 start adapter, failing closed without Overhaul.
 
-    Prefer RLS's dedicated mode when loaded, but keep vanilla fallback so a
-    CareerMP-only 0.40 session uses standard career. Do not mutate globals or
-    alter RLS gameMode.lua.
+    CareerMP 0.40 in this project is not a standalone vanilla career mod.
+    It must never start stock career if RLS has not initialized.
     """
     if COMPAT not in entries:
         raise RuntimeError("CareerMP compat.lua missing")
-    source = entries[COMPAT].decode("utf-8").replace("\\r\\n", "\\n")
+    source = entries[COMPAT].decode("utf-8").replace("\r\n", "\n")
     marker = "-- CareerMP040 RLS 2.8 dedicated game mode adapter"
     if marker in source:
         return
