@@ -34,9 +34,11 @@ jobs:
             --careermp-client /tmp/careermp-source.zip \
             --careermp-server /tmp/careermp-039/Resources/Server/CareerMP/careerMP.lua \
             --output /tmp/experimental-source-fixture \
+            --resources-root Resources \
             --experimental
       - name: Check output artifact structure (source fixtures not playable)
         run: |
-          test -s /tmp/experimental-source-fixture/rls_2.8.0_careermp_040_EXPERIMENTAL.zip
+          test -s /tmp/experimental-source-fixture/rls_2.8.0_careermp_040_PATCH_ONLY.zip
           test -s /tmp/experimental-source-fixture/careermp_040_rls280_EXPERIMENTAL.zip
           test -s /tmp/experimental-source-fixture/careerMP_040_EXPERIMENTAL.lua
+
