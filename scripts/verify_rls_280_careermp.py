@@ -15,13 +15,13 @@ def main() -> int:
     patch_rls_280_multiplayer(entries)
     assert entries[SHELL] != original, "No change to BeamMP refusal guard"
     source = entries[SHELL].decode("utf-8")
-    assert "CareerMP040: only waive the BeamMP block" in source
+    assert "CareerMP040: permit BeamMP only after this client's Overhaul-only" in source
     assert "if versionUnsupported then" in source
     assert 'loadScope("careerCore")' in source or 'loadCareerCore()' in source
     assert "ensureInputActionsRegistered()" in source
     assert "loadScope(\"routes\")" in source
     assert "loadScope(\"shell\")" in source
-    assert 'if type(cmp) == "table" and type(cmp.getCurrentProfile) == "function" then' in source
+    assert 'type(enabler.isOverhaulModeNegotiated) == "function"' in source
     assert 'BeamMP is active; Career Overhaul cannot start until it is disabled' in source
     snapshot = dict(entries)
     patch_rls_280_multiplayer(entries)
