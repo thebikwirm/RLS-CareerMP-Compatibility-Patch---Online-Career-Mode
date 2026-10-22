@@ -20,6 +20,12 @@ def patch_client_handshake(entries: dict[str, bytes]) -> None:
 local modeConfirmed = false
 local modeReadySent = false
 
+-- Expose the server-negotiated state to the RLS startup guard.
+-- Unlike careerMP_compat, this only returns true after rxCareerModeConfig.
+function M.isOverhaulModeNegotiated()
+  return modeConfirmed == true
+end
+
 local function rxCareerModeConfig(data)
   local ok, payload = pcall(jsonDecode, data)
   if not ok or type(payload) ~= "table" or payload.protocol ~= 1 or payload.mode ~= "overhaul" then
