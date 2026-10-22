@@ -1,0 +1,8 @@
+{
+  "displayName": "Keyboard",
+  "imagePack": "keyboard",
+  "bindings": [
+    {"control": "ctrl l", "action": "overhaulLuaReload"},
+    {"control": "ctrl-shift p", "action": "openPhone"}
+  ]
+}

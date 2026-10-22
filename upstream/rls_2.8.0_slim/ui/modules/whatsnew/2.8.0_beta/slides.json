@@ -1,0 +1,89 @@
+{
+  "label": "v2.8.0 Beta",
+  "continueLabel": "Continue",
+  "loadingLabel": "Loading career...",
+  "dontShowLabel": "Don't show again",
+  "slides": [
+    {
+      "kind": "intro",
+      "image": "hero.jpg",
+      "eyebrow": "Update log",
+      "title": "RLS Career Overhaul v2.8.0 Beta",
+      "subtitle": "Beta, October 2026",
+      "summary": "Your money in one place, smoother jobs and a lot of fixes since the Alpha.",
+      "contentsLabel": "In this update"
+    },
+    {
+      "image": "wallet.jpg",
+      "textSide": "top-left",
+      "kicker": "New app",
+      "title": "Meet your Wallet",
+      "summary": "See where every dollar comes from and where it goes.",
+      "facts": [
+        "Get the Wallet app from the phone's App Store",
+        "Sort your money by car, by job or by category",
+        "Tap your balance at the top of the phone to open it",
+        "Financial History in the pause menu is bigger and grouped the same way",
+        "Tows, fines and fees now show up under the right category",
+        "Insurance names read properly on every screen"
+      ]
+    },
+    {
+      "image": "jobs.jpg",
+      "textSide": "top-left",
+      "kicker": "Jobs, cars and events",
+      "title": "Smoother jobs, faster game",
+      "summary": "Less waiting, less clutter and fewer surprises on the road.",
+      "facts": [
+        "Profiles and saves open faster, and saving no longer flashes the screen",
+        "My Loads groups matching jobs, and you only lose the cargo you choose to drop",
+        "Towing off a dyno puts your wheels back; towing with a job asks you to cancel it first",
+        "Quarry trucks wait in neutral instead of burning out their clutch",
+        "The auction hall is back, and you can list up to five cars at once",
+        "Events show your best times and drift scores, with the car that set them"
+      ]
+    },
+    {
+      "kind": "list",
+      "image": "everything-else.jpg",
+      "title": "And everything else",
+      "lead": "Lots of smaller fixes all over the game.",
+      "imageBlur": 6,
+      "columns": [
+        {
+          "heading": "Money and business",
+          "items": [
+            "Bank withdrawals and transfers show the right amounts",
+            "Loan prepayments only count once",
+            "Engine shops charge once per build and show clean engine pictures",
+            "Stored engines and fleet cars keep their condition",
+            "Repaired cars and spare parts sell for fair prices",
+            "Lens Flare only rents out cars you own and can drive"
+          ]
+        },
+        {
+          "heading": "Driving and deliveries",
+          "items": [
+            "Choose the exact fluid amount before you load",
+            "Bought cars get a garage spot before you pick them up",
+            "Taxis let you sit in the back and stop when you ask",
+            "Fuel bills only charge for fuel you actually got",
+            "Traffic and parking follow your settings",
+            "Walking counts toward stamina; teleports don't"
+          ]
+        },
+        {
+          "heading": "Menus and saves",
+          "items": [
+            "The pause menu shows your balance, car and all 11 skills",
+            "Utah dealers chat again, in their own words",
+            "Your newest save always loads, and your other saves stay safe",
+            "Roadside repairs catch gearbox problems",
+            "Tuning tents let you pick which car to tune",
+            "Works with BeamNG.drive 0.40.1"
+          ]
+        }
+      ]
+    }
+  ]
+}

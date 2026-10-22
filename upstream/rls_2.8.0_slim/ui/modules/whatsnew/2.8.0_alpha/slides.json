@@ -1,0 +1,108 @@
+{
+  "label": "v2.8.0 Alpha",
+  "continueLabel": "Continue",
+  "loadingLabel": "Loading career...",
+  "dontShowLabel": "Don't show again",
+  "slides": [
+    {
+      "kind": "intro",
+      "image": "hero.jpg",
+      "eyebrow": "Update log",
+      "title": "RLS Career Overhaul v2.8.0 Alpha",
+      "subtitle": "Alpha, October 2026",
+      "summary": "Overhaul is now its own game mode on BeamNG.drive 0.40. Here are the biggest changes since v2.7.2.",
+      "contentsLabel": "In this update"
+    },
+    {
+      "image": "everything-else.jpg",
+      "textSide": "top-left",
+      "kicker": "BeamNG 0.40",
+      "title": "Overhaul is now its own game mode",
+      "summary": "Updated for 0.40, with its own saves and its own copy of West Coast, so stock Career and the stock map stay untouched.",
+      "facts": [
+        "Start or resume from the new card on the main menu or the Career screen",
+        "Old saves: Create migrated copy keeps your original and shows what changed",
+        "Cars, parts and seats updated to 0.40, with new config thumbnails",
+        "Turn the mod off mid-game and the stock game comes back cleanly"
+      ]
+    },
+    {
+      "image": "broker.jpg",
+      "textSide": "top-left",
+      "kicker": "Work and travel",
+      "title": "Every load can finish, and your cars stay put",
+      "summary": "Deliveries run from pickup to payout, and your cars survive saves, reloads and map travel.",
+      "facts": [
+        "Every material delivery type can be completed, and its progress survives reloads",
+        "A rebuilt Job Broker: Available and Locked tabs, Start here at your pickup, and fit badges for your vehicle",
+        "Parcel jobs route to the right freight dock; trailer offers show the trailer you tow",
+        "Damage comes back exactly and no longer grows with each reload",
+        "Cars on a hauler stay on the deck through travel, and tilt decks keep their angle",
+        "Cars parked out in the world are still there when you come back"
+      ]
+    },
+    {
+      "image": "employment.jpg",
+      "textSide": "top-left",
+      "kicker": "Speed and saves",
+      "title": "Faster, and safer with your saves",
+      "summary": "Quicker to start, lighter while you drive, and saves that no longer freeze the game.",
+      "facts": [
+        "Faster career start, and your saves appear on the profile screen right away",
+        "The phone opens instantly; apps, garage, dealership and Job Broker open faster",
+        "About half the background work per frame while driving",
+        "No freeze when saving, and a waiting autosave no longer blocks purchases",
+        "An incomplete save is refused, never wiped, and quitting without saving keeps money and cars in step"
+      ]
+    },
+    {
+      "kind": "list",
+      "image": "events.jpg",
+      "title": "And everything else",
+      "lead": "Controllers, events, the phone and fixes.",
+      "columns": [
+        {
+          "heading": "Controller support",
+          "items": [
+            "Play the whole career on a controller: phone, computer, business, marketplace, prompts and HUDs",
+            "A new Controls app on the phone, and an Overhaul group in Options > Controls",
+            "Set your phone button from the intro, with a key or a controller button",
+            "Start opens the pause menu, even with the phone open",
+            "A softer orange highlight that sits on the thing you can press",
+            "Sell, move-out and discard prompts start on Cancel"
+          ]
+        },
+        {
+          "heading": "Events and jobs",
+          "items": [
+            "Every drag strip now has a paying event",
+            "Freeroam drag strips stage and run reliably again",
+            "AI racers use their race tuning and recover when stuck",
+            "Derby barriers collide again",
+            "Taxi, bus and ambulance passengers sit in the seats, one in every bus seat",
+            "Shifts start at your employer's depot and end back at your yard",
+            "Loaners at any facility with bays; car hauling unlocks at Logistics level 14",
+            "Studio rental and loaner waypoints clear once you have parked",
+            "Staged pickups survive a reload; one far marker per Job Broker pickup"
+          ]
+        },
+        {
+          "heading": "Phone, screens and fixes",
+          "items": [
+            "New App Store with instant search; apps install in a third of a second",
+            "One level-up card, even for many level-ups at once",
+            "The used car auction is a full screen, controller ready, and pauses while you bid",
+            "Police spawn again when you play as an officer",
+            "Each map's own sky, fog and clouds return after weather",
+            "Textures no longer go missing after visiting another map",
+            "Damage is never fixed without a paid repair",
+            "Dealer negotiations no longer crash; -5% and -10% keep stepping",
+            "Older vehicles with passenger-only seats can be driven again",
+            "Old RLS saves show for import from the first visit, even with a damaged autosave"
+          ]
+        }
+      ],
+      "imageBlur": 6
+    }
+  ]
+}
