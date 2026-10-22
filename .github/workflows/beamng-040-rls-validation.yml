@@ -43,6 +43,8 @@ jobs:
           test -s /tmp/experimental-source-fixture/careerMP_040_EXPERIMENTAL.lua
 
 
+      - name: Run deployment safety regression tests
+        run: python -m unittest discover -s tests -p 'test_deploy_server_040.py' -v
       - name: Check deployment script and simulated server install
         run: |
           python -m py_compile scripts/deploy_server_040.py
