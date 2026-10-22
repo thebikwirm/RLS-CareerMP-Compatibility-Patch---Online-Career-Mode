@@ -2442,6 +2442,15 @@ def main() -> int:
             "Cannot detect RLS version from source filename. "
             "Expected rls_career_overhaul_X.Y.Z*.zip"
         )
+    # RLS 2.8 is a new 0.40 architecture (overhaul/shell, /overhaul
+    # Vue routes). Do not accidentally use legacy 0.39/2.7.2 rewrites.
+    if rls_original and re.search(r"2[._-]8[._-]0", rls_original.name, re.I):
+        raise SystemExit(
+            "RLS 2.8.0 / BeamNG 0.40 must use a dedicated builder. "
+            "The 0.39 builder would overwrite its new shell and phone routing. "
+            "Run scripts/verify_rls_280_source.py for the first source audit; "
+            "a 0.40 release builder is not ready."
+        )
     rls_out = (
         out_dir / f"rls_career_overhaul_{rls_version_match.group(1)}_careermp_compatible.zip"
         if rls_original else None
