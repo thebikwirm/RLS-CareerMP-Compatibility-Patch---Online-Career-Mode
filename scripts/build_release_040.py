@@ -5,6 +5,7 @@ Do not replace vanilla RLS/BeamMP files, and do not ship without the explicit
 """
 from __future__ import annotations
 import argparse
+import shutil
 from pathlib import Path
 from build_release import read_zip_entries, read_careermp_entries
 from zip_utils import write_zip
@@ -24,6 +25,7 @@ def main() -> None:
     parser.add_argument("--careermp-client", type=Path, required=True, help="CareerMP 0.39 client ZIP (port source)")
     parser.add_argument("--careermp-server", type=Path, required=True, help="CareerMP 0.39 server careerMP.lua")
     parser.add_argument("--output", type=Path, default=Path("built-040-experimental"))
+    parser.add_argument("--resources-root", type=Path, help="Original Resources folder, staged without modifying originals")
     parser.add_argument("--experimental", action="store_true")
     args = parser.parse_args()
     if not args.experimental:
@@ -32,6 +34,7 @@ def main() -> None:
         if not file.is_file():
             parser.error(f"Missing input: {file}")
     rls = read_zip_entries(args.rls_original)
+    original_rls = dict(rls)
     client = read_careermp_entries(args.careermp_client)
     verify_rls_280_mode(rls)
     patch_rls_280_multiplayer(rls)
@@ -45,14 +48,32 @@ def main() -> None:
     patch_client_handshake(client)
     server = patch_server(args.careermp_server.read_text(encoding="utf-8-sig"))
     assert "careerModeHello" in server and "careerModeReady" in server
-    # A dedicated installer must eventually ensure correct RLS and CareerMP
-    # versions and server settings. These outputs are not installed automatically.
     args.output.mkdir(parents=True, exist_ok=True)
-    write_zip(args.output / "rls_2.8.0_careermp_040_EXPERIMENTAL.zip", rls, engine="python")
+    if args.resources_root:
+        if not (args.resources_root / "Client").is_dir() or not (args.resources_root / "Server").is_dir():
+            parser.error("--resources-root must contain Client and Server")
+        staged = args.output / "Resources"
+        if staged.resolve() == args.resources_root.resolve() or args.resources_root.resolve() in staged.resolve().parents:
+            parser.error("Output must not be inside original Resources")
+        shutil.copytree(args.resources_root, staged, dirs_exist_ok=True)
+        write_zip(staged / "Client" / "CareerMP.zip", client, engine="python")
+        target = staged / "Server" / "CareerMP" / "careerMP.lua"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(server, encoding="utf-8")
+        # RLS input is a slim source archive, not a distributable full mod.
+        (staged / "Client" / "rls_career_overhaul_v2.8.0_beta.zip").unlink(missing_ok=True)
+    changed_rls = {name: data for name, data in rls.items() if original_rls.get(name) != data}
+    if not changed_rls:
+        raise RuntimeError("No RLS source changes found; patch output would be empty")
+    for name, data in changed_rls.items():
+        target = args.output / "RLS-OVERLAY-ONLY" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    write_zip(args.output / "rls_2.8.0_careermp_040_PATCH_ONLY.zip", changed_rls, engine="python")
     write_zip(args.output / "careermp_040_rls280_EXPERIMENTAL.zip", client, engine="python")
     (args.output / "careerMP_040_EXPERIMENTAL.lua").write_text(server, encoding="utf-8")
-    print("Wrote experimental artifacts. IMPORTANT: not runtime verified.")
-    print("RLS Overhaul vehicle safety and all client handlers still require in-game validation.")
+    print("Created staged Resources and RLS patch-only overlay; no originals were modified.")
+    print("DO NOT install RLS patch-only ZIP as if it were a complete RLS mod.")
 
 if __name__ == "__main__":
     main()
