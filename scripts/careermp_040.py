@@ -89,7 +89,7 @@ def patch_careermp_040_overhaul_adapter(entries: dict[str, bytes]) -> None:
     if marker in source:
         return
     original = """function M.createOrLoadCareerAndStart(name, specificSaveFolder, startMode)
-\tlocal career = career_career"""
+\tlog("E", "careerMP.compat", "RLS 2.8 game mode missing; no vanilla fallback")\n\treturn false"""
     replacement = """function M.createOrLoadCareerAndStart(name, specificSaveFolder, startMode)
 \t-- CareerMP040 RLS 2.8 dedicated game mode adapter
 \t-- The Overhaul mode owns UI/game-state transitions; starting its career
