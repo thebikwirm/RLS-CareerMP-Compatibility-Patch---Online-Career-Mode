@@ -59,27 +59,27 @@ end
             'TriggerServerEvent("careerModeHello", jsonEncode({ protocol = 1, mode = "overhaul" }))',
         )
         source = pre + "local function rxCareerSync(data)" + post
-        hook = '\\tAddEventHandler("rxCareerSync", rxCareerSync)'
+        hook = '\tAddEventHandler("rxCareerSync", rxCareerSync)'
         if source.count(hook) != 1:
             raise RuntimeError("Custom CareerMP event registry changed")
-        source = source.replace(hook, '\\tAddEventHandler("rxCareerModeConfig", rxCareerModeConfig)\\n' + hook, 1)
+        source = source.replace(hook, '\tAddEventHandler("rxCareerModeConfig", rxCareerModeConfig)\n' + hook, 1)
         tick = '''local function onUpdate(dtReal, dtSim, dtRaw)
-\\tprocessPendingCareerStart(dtReal)'''
+\tprocessPendingCareerStart(dtReal)'''
         if source.count(tick) != 1:
             raise RuntimeError("Custom CareerMP update callback changed")
         source = source.replace(tick, '''local function onUpdate(dtReal, dtSim, dtRaw)
   sendOverhaulReady()
-\\tprocessPendingCareerStart(dtReal)''', 1)
-        leave = '''\\tcareerMPActive = false
-\\tsyncRequested = false'''
+\tprocessPendingCareerStart(dtReal)''', 1)
+        leave = '''\tcareerMPActive = false
+\tsyncRequested = false'''
         if source.count(leave) != 1:
             raise RuntimeError("Custom CareerMP disconnect state changed")
-        source = source.replace(leave, '''\\tcareerMPActive = false
-\\tsyncRequested = false
+        source = source.replace(leave, '''\tcareerMPActive = false
+\tsyncRequested = false
   modeConfirmed = false
   modeReadySent = false''', 1)
         sync = '''local function rxCareerSync(data)
-\\tclientConfig = jsonDecode(data)'''
+\tclientConfig = jsonDecode(data)'''
         if source.count(sync) != 1:
             raise RuntimeError("Custom CareerMP rxCareerSync changed")
         source = source.replace(sync, '''local function rxCareerSync(data)
@@ -87,7 +87,7 @@ end
     log("E", logTag, "Ignoring sync before RLS Overhaul mode negotiation")
     return
   end
-\\tclientConfig = jsonDecode(data)''', 1)
+\tclientConfig = jsonDecode(data)''', 1)
         entries[CLIENT] = source.encode("utf-8")
         return
 
