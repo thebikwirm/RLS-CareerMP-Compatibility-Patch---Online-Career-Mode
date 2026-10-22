@@ -27,6 +27,20 @@ jobs:
         run: |
           python scripts/check_careermp_040.py /tmp/careermp-source.zip
           python scripts/verify_careermp_040_server.py /tmp/careermp-039/Resources/Server/CareerMP/careerMP.lua
+      - name: Inspect committed client activation implementation
+        run: |
+          python - <<'PY'
+          import zipfile
+          with zipfile.ZipFile("Resources/Client/CareerMP.zip") as z:
+              names = [n for n in z.namelist() if n.endswith("lua/ge/extensions/careerMPEnabler.lua")]
+              print("Enabler entries:", names)
+              for n in names:
+                  lines = z.read(n).decode("utf-8-sig").splitlines()
+                  for i, line in enumerate(lines):
+                      if "careerPatches" in line or "withRemoteVehiclesProtected" in line or "createOrLoadCareerAndStart(profileName" in line:
+                          print("===== at", i+1, "=====")
+                          print("\\n".join(f"{j+1}: {lines[j]}" for j in range(max(0,i-3),min(len(lines),i+6))))
+          PY
       - name: Exercise experimental builder with committed CareerMP archive
         run: |
           python scripts/build_release_040.py \
