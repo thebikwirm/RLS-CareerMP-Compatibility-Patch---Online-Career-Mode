@@ -74,3 +74,19 @@ Added `scripts/careermp_040_server.py` with a **staged source patch**, not deplo
 ## Scope decision: RLS mandatory (Overhaul-only)
 
 The user will not run CareerMP without RLS. BeamNG 0.40 builds require RLS Career Overhaul 2.8 and no longer maintain a vanilla-career fallback. The staged CareerMP activation adapter fails if `overhaul_shell_gameMode` is unavailable instead of silently launching vanilla `career_career`. The server negotiates only `overhaul`, and no longer treats a legacy sync request as proof of activation. Both sides must implement the same explicit mode handshake before release.
+
+## Experimental 0.40 source-build integration
+
+Added client-side protocol staging `scripts/careermp_040_handshake.py`: negotiate `careerModeHello` with `overhaul`, receive `rxCareerModeConfig`, then request legacy config through `careerSyncRequested`; `careerModeReady` is sent only after both `overhaul_shell_gameMode.isActive()` and `overhaul_career_career.isActive()` are true. Disconnect clears session negotiation state. Server and client protocol must be deployed together.
+
+The RLS 2.8 `overhaul/career/start/transitions.lua` source has **both** `core_vehicles.removeAll()` and `context.removeNonTrafficVehicles()` during activation. Added `scripts/rls_280_vehicle_safety.py` to bypass these branches only when CareerMP compatibility/enabler are present, retaining native single-player operation. This is source-level protection; joining mid-session, map transitions, insurance garage spawning, and remote vehicle ownership still require in-game tests.
+
+Created opt-in `scripts/build_release_040.py` to generate three separate **experimental** artifacts from the original RLS 2.8 ZIP, the CareerMP client ZIP, and CareerMP server Lua; it explicitly requires `--experimental` and does not install anything. Typical command (run from repository root):
+
+```powershell
+python scripts/build_release_040.py --rls-original "C:\\path\\rls_career_overhaul_v2.8.0_beta.zip" --careermp-client "C:\\path\\CareerMP.zip" --careermp-server "C:\\path\\careerMP.lua" --experimental
+```
+
+Outputs are in `built-040-experimental/`. The builder and generated ZIPs **have not been executed or tested** here, since the file execution environment was unavailable. Even if it builds, DO NOT use the output on a valuable save or a production server; experimental code may fail or conflict with BeamNG/BeamMP. Before live testing, run offline validation, and back up BeamNG user saves and mod/server folders.
+
+**Critical remaining checks before a safe playable build:** verify the RLS 2.8 full ZIP matches slim file layout; confirm the redesigned RLS shell loads at the correct stage; ensure the CareerMP client activation guard and its vanilla career patches do not interfere with Overhaul; port CareerMP save/profile calls to `overhaul_career_saveSystem`; review all other player vehicle cleanup paths; validate the new protocol and multiplayer connection using current BeamMP; check UI/phone routing and reconnects. These remain blockers, not completed tasks.
