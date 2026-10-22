@@ -70,3 +70,7 @@ Added `scripts/careermp_040_server.py` with a **staged source patch**, not deplo
 **Required client implementation before testing:** send `careerModeHello` (protocol=1, mode=`overhaul`) BEFORE requesting legacy career sync; consume `rxCareerModeConfig`; launch `overhaul_shell_gameMode.start`; send `careerModeReady` (protocol=1, mode=`overhaul`, active=true) only after actual Overhaul mode and career module report active. Handle server timeout and reconnect; do not treat receipt of a sync request as successful activation.
 
 **Unresolved:** BeamMP 0.40 protocol transport and listener conventions must be confirmed from the updated client. This is a proposed application-level protocol, not an interoperable existing one. Existing legacy CareerMP sync remains fallback pending validation. The new server patch is not yet wired into a builder or deployed.
+
+## Scope decision: RLS mandatory (Overhaul-only)
+
+The user will not run CareerMP without RLS. BeamNG 0.40 builds require RLS Career Overhaul 2.8 and no longer maintain a vanilla-career fallback. The staged CareerMP activation adapter fails if `overhaul_shell_gameMode` is unavailable instead of silently launching vanilla `career_career`. The server negotiates only `overhaul`, and no longer treats a legacy sync request as proof of activation. Both sides must implement the same explicit mode handshake before release.
