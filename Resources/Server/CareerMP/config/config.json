@@ -1,0 +1,36 @@
+{
+    "client": {
+        "consoleEnabled": false,
+        "extraTrafficAmount": 0,
+        "extraTrafficEnabled": false,
+        "localUnicycleGhost": false,
+        "nativeDragSyncEnabled": true,
+        "parkedTrafficAmount": 0,
+        "parkedTrafficEnabled": false,
+        "remoteUnicycleGhost": true,
+        "remoteVehicleGhost": false,
+        "roadTrafficAmount": 0,
+        "roadTrafficEnabled": false,
+        "serverSaveName": "beta19west",
+        "serverSaveNameEnabled": true,
+        "serverSaveSuffix": "",
+        "simplifyRemoteVehicles": false,
+        "skipOtherPlayersVehicles": false,
+        "spawnVehicleIgnitionLevel": 0,
+        "trafficAllowMods": true,
+        "trafficSimpleVehicles": true,
+        "trafficSmartSelections": true,
+        "worldEditorEnabled": false
+    },
+    "server": {
+        "allowTransactions": true,
+        "autoExit": true,
+        "autoUpdate": false,
+        "longWindowMax": 10000,
+        "longWindowSeconds": 300,
+        "sessionReceiveMax": 200000,
+        "sessionSendingMax": 100000,
+        "shortWindowMax": 1000,
+        "shortWindowSeconds": 30
+    }
+}
