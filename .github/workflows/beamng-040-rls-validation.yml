@@ -45,6 +45,8 @@ jobs:
 
       - name: Test RLS career startup diagnostic instrumentation
         run: python -m unittest discover -s tests -p 'test_rls_280_start_diagnostics.py' -v
+      - name: Check mount-aware RLS activation gate
+        run: python -m unittest discover -s tests -p 'test_careermp_040_rls_readiness.py' -v
       - name: Run deployment safety regression tests
         run: python -m unittest discover -s tests -p 'test_deploy_server_040.py' -v
       - name: Check deployment script and simulated server install
