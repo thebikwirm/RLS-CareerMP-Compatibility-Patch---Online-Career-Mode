@@ -36,6 +36,27 @@ local function rxCareerModeConfig(data)
   TriggerServerEvent("careerSyncRequested", "")
 end
 
+-- CareerMP040: wait for the complete RLS package and multiplayer-safe shell.
+-- Deferring the pending start does not change the negotiated server protocol.
+local rlsWaitLogged = false
+local function careerMP040RlsReady()
+  if not modeConfirmed then return false end
+  local fsReady = FS and type(FS.fileExists) == "function"
+    and FS:fileExists("/lua/ge/extensions/overhaul/career/saveSystem.lua")
+    and FS:fileExists("/lua/ge/extensions/overhaul/shell/gameMode.lua")
+  local mode = type(extensions) == "table" and rawget(extensions, "overhaul_shell_gameMode")
+  local ready = fsReady and type(mode) == "table"
+    and type(mode.start) == "function" and mode.careerMPVehicleSafety == true
+  if not ready and not rlsWaitLogged then
+    log("I", logTag, "CareerMP040 waiting for RLS mount and protected game mode")
+    rlsWaitLogged = true
+  elseif ready and rlsWaitLogged then
+    log("I", logTag, "CareerMP040 RLS ready, resuming deferred activation")
+    rlsWaitLogged = false
+  end
+  return ready
+end
+
 local function sendOverhaulReady()
   if modeReadySent or not careerMPActive then return end
   local mode = type(extensions) == "table" and rawget(extensions, "overhaul_shell_gameMode")
@@ -75,6 +96,7 @@ end
             raise RuntimeError("Custom CareerMP update callback changed")
         source = source.replace(tick, '''local function onUpdate(dtReal, dtSim, dtRaw)
   sendOverhaulReady()
+  if not careerMP040RlsReady() then return end
 \tprocessPendingCareerStart(dtReal)''', 1)
         leave = '''\tcareerMPActive = false
 \tsyncRequested = false'''
@@ -114,6 +136,7 @@ end
         raise RuntimeError("CareerMP frame callback changed")
     source = source.replace(tick, '''local function onUpdate(dtReal, dtSim, dtRaw)
   sendOverhaulReady()
+  if not careerMP040RlsReady() then return end
 \tif worldReadyState ~= 2 or not clientConfig then return end''', 1)
     leave = '''\tcareerMPActive = false
 \tsyncRequested = false'''
