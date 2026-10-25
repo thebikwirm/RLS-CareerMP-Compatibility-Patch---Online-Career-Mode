@@ -11,6 +11,7 @@ from build_release import read_zip_entries, read_careermp_entries
 from zip_utils import write_zip
 from rls_280_careermp import patch_rls_280_multiplayer
 from rls_280_vehicle_safety import patch_overhaul_mp_vehicle_safety
+from rls_280_start_diagnostics import patch_start_diagnostics
 from careermp_040 import stage_careermp_040, patch_careermp_040_overhaul_adapter, verify_rls_280_mode
 from careermp_040_handshake import patch_client_handshake
 from careermp_040_profiles import patch_careermp_overhaul_profiles
@@ -39,6 +40,7 @@ def main() -> None:
     verify_rls_280_mode(rls)
     patch_rls_280_multiplayer(rls)
     patch_overhaul_mp_vehicle_safety(rls)
+    patch_start_diagnostics(rls)
     stage_careermp_040(client)
     patch_careermp_040_overhaul_adapter(client)
     patch_careermp_overhaul_profiles(client)
