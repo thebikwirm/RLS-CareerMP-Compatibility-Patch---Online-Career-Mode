@@ -43,6 +43,8 @@ jobs:
           test -s /tmp/experimental-source-fixture/careerMP_040_EXPERIMENTAL.lua
 
 
+      - name: Test RLS career startup diagnostic instrumentation
+        run: python -m unittest discover -s tests -p 'test_rls_280_start_diagnostics.py' -v
       - name: Run deployment safety regression tests
         run: python -m unittest discover -s tests -p 'test_deploy_server_040.py' -v
       - name: Check deployment script and simulated server install
