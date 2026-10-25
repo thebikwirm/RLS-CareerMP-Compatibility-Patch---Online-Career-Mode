@@ -12,6 +12,8 @@ from zip_utils import write_zip
 from rls_280_careermp import patch_rls_280_multiplayer
 from rls_280_vehicle_safety import patch_overhaul_mp_vehicle_safety
 from rls_280_start_diagnostics import patch_start_diagnostics
+from rls_280_profile_diagnostics import patch_rls_profile_diagnostics
+from careermp_040_paint import patch_legacy_paint
 from careermp_040 import stage_careermp_040, patch_careermp_040_overhaul_adapter, verify_rls_280_mode
 from careermp_040_handshake import patch_client_handshake
 from careermp_040_profiles import patch_careermp_overhaul_profiles
@@ -41,12 +43,14 @@ def main() -> None:
     patch_rls_280_multiplayer(rls)
     patch_overhaul_mp_vehicle_safety(rls)
     patch_start_diagnostics(rls)
+    patch_rls_profile_diagnostics(rls)
     stage_careermp_040(client)
     patch_careermp_040_overhaul_adapter(client)
     patch_careermp_overhaul_profiles(client)
     patch_overhaul_activation_flow(client)
     patch_overhaul_payments(client, rls)
     patch_overhaul_only_runtime(client)
+    patch_legacy_paint(client)
     patch_client_handshake(client)
     server = patch_server(args.careermp_server.read_text(encoding="utf-8-sig"))
     assert "careerModeHello" in server and "careerModeReady" in server
