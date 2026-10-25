@@ -18,7 +18,7 @@ def patch_legacy_paint(entries: dict[str, bytes]) -> None:
     if "career_modules_inventory" not in source:
         raise RuntimeError("Legacy CareerMP paint source no longer uses vanilla inventory; re-audit before disabling")
     entries[PAINT] = (marker + """
--- TODO: implement equivalent hooks against overhaul_career_garage_inventory
+-- TODO: implement equivalent hooks against RLS Overhaul inventory
 -- after confirming RLS paint lifecycle and multiplayer ownership checks.
 local M = {}
 return M
