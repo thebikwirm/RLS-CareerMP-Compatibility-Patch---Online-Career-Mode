@@ -76,6 +76,18 @@ end'''
     if source.count(old) != 1:
         raise RuntimeError("CareerMP server activation handshake changed")
     source = source.replace(old, new, 1)
+    # Preserve the activation timeout; log which handshake stage was missing.
+    watchdog = '''\t\t\t\t\t\t\tMP.DropPlayer(id, "CareerMP failed to load!")'''
+    watchdog_diag = '''\t\t\t\t\t\t\tlocal stage = pendingActivation[id].modeProtocol ~= 1 and "awaiting_mode_hello"
+                              or pendingActivation[id].mode ~= "overhaul" and "invalid_mode"
+                              or "awaiting_career_ready"
+                            print("[CareerMP040-DIAG] activation timeout player=" .. tostring(id)
+                              .. " stage=" .. stage .. " careerActive=" .. tostring(pendingActivation[id].careerActive)
+                              .. " elapsed=" .. tostring(signalTimer:GetCurrent() - pendingActivation[id].joinTimestamp))
+\t\t\t\t\t\t\tMP.DropPlayer(id, "CareerMP failed to load!")'''
+    if source.count(watchdog) != 1:
+        raise RuntimeError("CareerMP watchdog timeout layout changed")
+    source = source.replace(watchdog, watchdog_diag, 1)
     # Do not allow the default upstream updater to replace our experimental
     # server code. Existing user config.json can override the default.
     if source.count("autoUpdate = true,") != 1:
