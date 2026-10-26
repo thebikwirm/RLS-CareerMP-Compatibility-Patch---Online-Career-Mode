@@ -20,20 +20,52 @@ APP = {
 
 VUE = """<template>
   <section class="careermp-home">
-    <h2>CareerMP</h2>
-    <p>Multiplayer phone integration (experimental)</p>
-    <p>This screen confirms that the RLS phone can load a CareerMP app.</p>
-    <p>Banking, parties and shared vehicles still use the existing CareerMP interfaces.</p>
+    <header class="careermp-heading">
+      <h2>CareerMP</h2>
+      <p>Multiplayer career tools</p>
+    </header>
+
+    <div class="careermp-panel">
+      <h3>Career save</h3>
+      <p>Save your current RLS career profile on this computer.</p>
+      <BngButton @click="saveCareer">Save Career</BngButton>
+      <p v-if="saveRequested" class="careermp-notice">
+        Save requested. Verify completion in the game log.
+      </p>
+    </div>
+
+    <div class="careermp-panel">
+      <h3>Multiplayer features</h3>
+      <p>Banking, parties and shared vehicles currently use their existing
+         CareerMP interfaces while phone migration is in progress.</p>
+    </div>
   </section>
 </template>
 
 <script setup>
-// Intentionally no networking or lifecycle hooks in the initial smoke test.
+import { ref } from "vue"
+import { BngButton } from "@/common/components/base"
+import { useBridge } from "@/bridge"
+
+const { api } = useBridge()
+const saveRequested = ref(false)
+
+function saveCareer() {
+  saveRequested.value = false
+  // The RLS game mode owns the active profile and save queue. Never send
+  // arbitrary client money or save data to the multiplayer server.
+  api.engineLua('if overhaul_shell_gameMode and overhaul_shell_gameMode.isActive() then overhaul_shell_gameMode.save() else guihooks.trigger("toastrMsg", {type="warning", title="Career save", msg="RLS career is not active"}) end')
+  saveRequested.value = true
+}
 </script>
 
 <style scoped>
-.careermp-home { padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
-.careermp-home h2 { font-size: 1.35rem; font-weight: 700; }
+.careermp-home { padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+.careermp-heading h2 { font-size: 1.4rem; font-weight: 700; }
+.careermp-panel { padding: .8rem; border-radius: .5rem; background: rgba(128,128,128,.12); }
+.careermp-panel h3 { margin: 0 0 .4rem; font-size: 1.05rem; font-weight: 650; }
+.careermp-panel p { margin: .5rem 0; }
+.careermp-notice { font-size: .85rem; opacity: .85; }
 </style>
 """
 
