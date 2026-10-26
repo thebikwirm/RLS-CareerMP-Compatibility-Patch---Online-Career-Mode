@@ -109,7 +109,7 @@ end"""
 \t\tlog("E", "careerMP.compat", "RLS 2.8 game mode or multiplayer vehicle safety patch missing")
 \t\treturn false
 \tend
-\tlocal ok, reason = mode.start(name, specificSaveFolder, {
+\t-- CareerMP passes false for the default autosave; RLS requires nil.\n\tif specificSaveFolder == false then specificSaveFolder = nil end\n\tlocal ok, reason = mode.start(name, specificSaveFolder, {
 \t\tstartMode = startMode or M.defaultStartMode,
 \t})
 \tif not ok then
