@@ -160,7 +160,7 @@ local careerMP040Protection = {
             'extensions and extensions["overhaul_career_career"]',
         )
         source = patch_profile_selector(source)
-    entries[ENABLER] = source.encode("utf-8")
+        entries[ENABLER] = source.encode("utf-8")
         return
 
     guard = re.compile(
@@ -202,4 +202,5 @@ local careerMP040Protection = {
             f"Could not safely identify CareerMP's activation wrapper (matches={wrappers}); "
             "client ZIP differs from audited upstream source."
         )
+    source = patch_profile_selector(source)
     entries[ENABLER] = source.encode("utf-8")
