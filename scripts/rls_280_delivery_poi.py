@@ -1,4 +1,4 @@
-"""Guard only the vanilla delivery POI callback during RLS multiplayer.
+"""Guard vanilla delivery POI and activity-list callbacks during RLS multiplayer.
 
 BeamNG 0.40 vanilla general.lua may receive onGetRawPoiListForLevel before
 its private dParcelManager is initialized. Do not suppress other exceptions,
@@ -25,6 +25,22 @@ REPLACEMENT = '''local function createLevelPatches()
           and result:find("nil value", 1, true) then
         if not deliveryPoiWarned then
           log("W", "RLSCareerMP040", "Vanilla delivery POIs deferred until parcel manager initializes: " .. result)
+          deliveryPoiWarned = true
+        end
+        return
+      end
+      error(result)
+    end,
+    -- This separate listener is called when an RLS logistics parking
+    -- marker gathers actions. Vanilla delivery can still have no manager.
+    onActivityAcceptGatherData = function(original, _, ...)
+      local ok, result = pcall(original, ...)
+      if ok then return result end
+      if type(result) == "string"
+          and result:find("dParcelManager", 1, true)
+          and result:find("nil value", 1, true) then
+        if not deliveryPoiWarned then
+          log("W", "RLSCareerMP040", "Vanilla delivery activity data deferred until parcel manager initializes: " .. result)
           deliveryPoiWarned = true
         end
         return
