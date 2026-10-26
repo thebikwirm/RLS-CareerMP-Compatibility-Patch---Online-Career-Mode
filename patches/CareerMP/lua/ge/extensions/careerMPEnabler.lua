@@ -20,6 +20,113 @@ local blockedInputActions = {}
 
 local clientConfig
 
+local PROFILE_CONFIG_PATH = "/settings/rls_careermp_profile.json"
+local DEFAULT_PROFILE_CONFIG = {
+	mode = "server",
+	profileName = "",
+	newProfileName = "RLS-CareerMP"
+}
+local profileConfig
+
+local function normalizeProfileConfig(config)
+	if type(config) ~= "table" then
+		config = {}
+	end
+
+	local mode = tostring(config.mode or DEFAULT_PROFILE_CONFIG.mode):lower()
+	if mode ~= "server" and mode ~= "existing" and mode ~= "new" then
+		mode = "server"
+	end
+
+	return {
+		mode = mode,
+		profileName = tostring(config.profileName or ""),
+		newProfileName = tostring(config.newProfileName or DEFAULT_PROFILE_CONFIG.newProfileName)
+	}
+end
+
+local function saveProfileConfig(config)
+	local ok, err = pcall(jsonWriteFile, PROFILE_CONFIG_PATH, config, true)
+	if not ok then
+		log('E', 'CareerMP-ProfileConfig', 'Unable to write ' .. PROFILE_CONFIG_PATH .. ': ' .. tostring(err))
+		return false
+	end
+	return true
+end
+
+local function loadProfileConfig()
+	local loaded
+	local ok, value = pcall(jsonReadFile, PROFILE_CONFIG_PATH)
+	if ok then
+		loaded = value
+	end
+
+	if type(loaded) ~= "table" then
+		profileConfig = normalizeProfileConfig(DEFAULT_PROFILE_CONFIG)
+		saveProfileConfig(profileConfig)
+		log('I', 'CareerMP-ProfileConfig', 'Created default profile config at ' .. PROFILE_CONFIG_PATH)
+	else
+		profileConfig = normalizeProfileConfig(loaded)
+	end
+
+	return profileConfig
+end
+
+local function getProfileConfig()
+	return profileConfig or loadProfileConfig()
+end
+
+local function getServerDerivedProfileName()
+	local profileBase = getMPNickname()
+	if clientConfig and clientConfig.serverSaveNameEnabled then
+		profileBase = tostring(clientConfig.serverSaveName or "")
+	end
+
+	local suffix = clientConfig and tostring(clientConfig.serverSaveSuffix or "") or ""
+	return profileBase .. suffix
+end
+
+local function resolveCareerProfileName()
+	local config = getProfileConfig()
+	local serverProfile = getServerDerivedProfileName()
+
+	if config.mode == "existing" then
+		if config.profileName ~= "" then
+			return config.profileName, "existing"
+		end
+		log('W', 'CareerMP-ProfileConfig', 'mode=existing but profileName is blank; falling back to server profile ' .. tostring(serverProfile))
+		return serverProfile, "server-fallback"
+	end
+
+	if config.mode == "new" then
+		if config.newProfileName ~= "" then
+			return config.newProfileName, "new"
+		end
+		log('W', 'CareerMP-ProfileConfig', 'mode=new but newProfileName is blank; falling back to server profile ' .. tostring(serverProfile))
+		return serverProfile, "server-fallback"
+	end
+
+	return serverProfile, "server"
+end
+
+local function setProfileConfig(mode, profileName)
+	local config = getProfileConfig()
+	local normalizedMode = tostring(mode or "server"):lower()
+	if normalizedMode ~= "server" and normalizedMode ~= "existing" and normalizedMode ~= "new" then
+		return false
+	end
+
+	config.mode = normalizedMode
+	if normalizedMode == "existing" then
+		config.profileName = tostring(profileName or "")
+	elseif normalizedMode == "new" then
+		config.newProfileName = tostring(profileName or "")
+	end
+
+	profileConfig = normalizeProfileConfig(config)
+	return saveProfileConfig(profileConfig)
+end
+
 local function getClientConfig()
 	return clientConfig
 end
@@ -590,11 +697,10 @@ local function rxCareerSync(data)
 	settingsCheck()
 	actionsCheck()
 	if not careerMPActive then
-		if clientConfig.serverSaveNameEnabled then
-			nickname = clientConfig.serverSaveName
-		end
+		local selectedProfile, profileMode = resolveCareerProfileName()
 		local currentLevel = getCurrentLevelIdentifier and getCurrentLevelIdentifier() or nil
-		career_career.createOrLoadCareerAndStart(nickname .. clientConfig.serverSaveSuffix, false, false, nil, nil, nil, currentLevel)
+		diag('career profile selected mode=' .. tostring(profileMode) .. ' profile=' .. tostring(selectedProfile))
+		career_career.createOrLoadCareerAndStart(selectedProfile, false, false, nil, nil, nil, currentLevel)
 		careerMPActive = true
 	end
 end
@@ -667,6 +773,7 @@ end
 --Loading / Unloading
 
 local function onExtensionLoaded()
+	loadProfileConfig()
 	getUserTrafficSettings()
 	getUserGameplaySettings()
 	AddEventHandler("rxCareerSync", rxCareerSync)
@@ -730,5 +837,9 @@ M.onExtensionUnloaded = onExtensionUnloaded
 M.onServerLeave = onServerLeave
 
 M.onInit = function() setExtensionUnloadMode(M, 'manual') end
+
+M.getProfileConfig = getProfileConfig
+M.setProfileConfig = setProfileConfig
+M.resolveCareerProfileName = resolveCareerProfileName
 
 return M
