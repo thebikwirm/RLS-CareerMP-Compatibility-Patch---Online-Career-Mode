@@ -31,6 +31,7 @@ local supportedCareerModes = { overhaul = true }
 
 function careerModeHello(player_id, data)
   local entry = pendingActivation[player_id]
+  print("[CareerMP040-DIAG] hello player=" .. tostring(player_id) .. " pending=" .. tostring(entry ~= nil) .. " connected=" .. tostring(MP.IsPlayerConnected(player_id)))
   if not entry or not MP.IsPlayerConnected(player_id) then return end
   local ok, payload = pcall(Util.JsonDecode, data or "")
   if not ok or type(payload) ~= "table" or
@@ -41,6 +42,7 @@ function careerModeHello(player_id, data)
   entry.mode = payload.mode
   entry.careerActive = false
   entry.modeProtocol = 1
+  print("[CareerMP040-DIAG] negotiated player=" .. tostring(player_id) .. " mode=" .. tostring(entry.mode) .. " careerActive=" .. tostring(entry.careerActive))
   MP.TriggerClientEventJson(player_id, "rxCareerModeConfig", {
     protocol = 1, mode = entry.mode, config = Config.client
   })
@@ -48,6 +50,7 @@ end
 
 function careerModeReady(player_id, data)
   local entry = pendingActivation[player_id]
+  print("[CareerMP040-DIAG] ready received player=" .. tostring(player_id) .. " pending=" .. tostring(entry ~= nil) .. " protocol=" .. tostring(entry and entry.modeProtocol) .. " mode=" .. tostring(entry and entry.mode) .. " connected=" .. tostring(MP.IsPlayerConnected(player_id)))
   if not entry or entry.modeProtocol ~= 1 or not MP.IsPlayerConnected(player_id) then return end
   local ok, payload = pcall(Util.JsonDecode, data or "")
   if not ok or type(payload) ~= "table" or payload.protocol ~= 1
@@ -55,12 +58,15 @@ function careerModeReady(player_id, data)
     return
   end
   entry.careerActive = true
+  print("[CareerMP040-DIAG] ready accepted player=" .. tostring(player_id) .. " careerActive=" .. tostring(entry.careerActive))
+  MP.TriggerClientEventJson(player_id, "rxCareerModeReadyAck", { protocol = 1, mode = entry.mode, active = true })
   print("[CareerMP040] Player " .. tostring(player_id) ..
       " activated " .. tostring(entry.mode) .. " career")
 end
 
 function careerSyncRequested(player_id)
   local entry = pendingActivation[player_id]
+  print("[CareerMP040-DIAG] sync requested player=" .. tostring(player_id) .. " pending=" .. tostring(entry ~= nil) .. " mode=" .. tostring(entry and entry.mode) .. " protocol=" .. tostring(entry and entry.modeProtocol))
   if not entry then return end
   if entry.mode ~= "overhaul" or entry.modeProtocol ~= 1 then return end
   MP.TriggerClientEventJson(player_id, "rxCareerSync", Config.client)
