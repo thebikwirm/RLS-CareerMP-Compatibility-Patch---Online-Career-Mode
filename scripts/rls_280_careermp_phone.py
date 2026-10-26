@@ -15,7 +15,7 @@ APP = {
     "name": "CareerMP",
     "icon": "people",
     "component": "/" + COMPONENT,
-    "unlock": {"type": "careerActive"},
+    "defaultHome": {"slot": 15, "required": True},
 }
 
 VUE = """<template>
