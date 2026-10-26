@@ -14,7 +14,7 @@ class HandshakeDiagnosticsTests(unittest.TestCase):
     def test_client_ready_ack_handler_in_both_paths(self):
         s = Path("scripts/careermp_040_handshake.py").read_text(encoding="utf-8")
         self.assertIn("local function rxCareerModeReadyAck(data)", s)
-        self.assertEqual(s.count('AddEventHandler(\\"rxCareerModeReadyAck\\", rxCareerModeReadyAck)'), 2)
+        self.assertEqual(s.count('AddEventHandler("rxCareerModeReadyAck", rxCareerModeReadyAck)'), 2)
         self.assertIn("server acknowledged RLS career activation", s)
 
 if __name__ == "__main__":
