@@ -55,8 +55,15 @@ def prepare_rls(archive: Path, overlay: Path, tmpdir: Path) -> Path:
         raise RuntimeError("RLS overlay is empty")
     existing = zip_entries(archive)
     missing = sorted(changes.keys() - existing)
-    if missing:
-        raise RuntimeError("RLS target mismatches source; missing: " + ", ".join(missing[:12]))
+    # New phone files are an intentional addition to the full RLS ZIP. Other
+    # unknown overlay paths still indicate a mismatched archive/source.
+    allowed_additions = {
+        "gameplay/overhaul/phone/apps/careermp-online.json",
+        "ui/ui-vue/mods/careermp/phone/CareerMPHome.vue",
+    }
+    unexpected = sorted(set(missing) - allowed_additions)
+    if unexpected:
+        raise RuntimeError("RLS target mismatches source; missing: " + ", ".join(unexpected[:12]))
     if len(existing) <= len(changes) + 5:
         raise RuntimeError("Installed RLS ZIP looks like a slim source archive; refusing deployment")
     # Build and integrity-check a complete replacement outside the server tree.
@@ -65,8 +72,10 @@ def prepare_rls(archive: Path, overlay: Path, tmpdir: Path) -> Path:
         for info in original.infolist():
             data = changes[info.filename].read_bytes() if info.filename in changes and not info.is_dir() else original.read(info.filename)
             patched.writestr(info, data)
-    if zip_entries(result) != existing:
-        raise RuntimeError("Patched RLS entry list differs from full source")
+        for name in missing:
+            patched.write(changes[name], arcname=name)
+    if zip_entries(result) != existing | set(missing):
+        raise RuntimeError("Patched RLS entry list differs from expected full source and approved additions")
     return result
 
 
