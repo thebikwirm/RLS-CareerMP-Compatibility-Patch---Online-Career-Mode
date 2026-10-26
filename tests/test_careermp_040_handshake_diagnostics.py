@@ -10,6 +10,9 @@ class HandshakeDiagnosticsTests(unittest.TestCase):
                        "[CareerMP040-DIAG] ready accepted player=", '"rxCareerModeReadyAck"'):
             self.assertIn(phrase, s)
         self.assertIn("entry.careerActive = true", s)
+        self.assertIn("activation timeout player=", s)
+        self.assertIn("awaiting_mode_hello", s)
+        self.assertIn("awaiting_career_ready", s)
 
     def test_client_ready_ack_handler_in_both_paths(self):
         s = Path("scripts/careermp_040_handshake.py").read_text(encoding="utf-8")
