@@ -68,6 +68,18 @@ local function resolveConfiguredCareerMPProfile(serverProfile)
   if config.mode == "existing" and config.profileName ~= "" then
     selected = config.profileName
     selectedMode = "existing"
+    -- RLS treats a missing profile as a create request, sanitizing its name
+    -- and possibly allocating a numbered sibling. Existing mode must never
+    -- silently create a new career: require the exact on-disk folder.
+    local exactPath = "/settings/cloud/overhaul/saves/" .. selected
+    local validName = selected:match("^[A-Za-z0-9][A-Za-z0-9_-]*$") ~= nil
+    if not validName or not FS:directoryExists(exactPath) then
+      log("E", "CareerMP-ProfileConfig", "Existing RLS profile folder NOT FOUND: " .. exactPath ..
+        " (check the exact folder name under settings/cloud/overhaul/saves)")
+      guihooks.trigger("toastrMsg", {type="error", title="CareerMP profile not found",
+        msg="Existing RLS save folder not found: " .. selected})
+      return nil
+    end
   elseif config.mode == "new" and config.newProfileName ~= "" then
     selected = config.newProfileName
     selectedMode = "new"
