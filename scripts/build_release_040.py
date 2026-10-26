@@ -14,6 +14,7 @@ from rls_280_vehicle_safety import patch_overhaul_mp_vehicle_safety
 from rls_280_start_diagnostics import patch_start_diagnostics
 from rls_280_profile_diagnostics import patch_rls_profile_diagnostics
 from rls_280_delivery_poi import patch_delivery_poi
+from rls_280_careermp_phone import patch_careermp_phone
 from careermp_040_paint import patch_legacy_paint
 from careermp_040 import stage_careermp_040, patch_careermp_040_overhaul_adapter, verify_rls_280_mode
 from careermp_040_handshake import patch_client_handshake
@@ -46,6 +47,7 @@ def main() -> None:
     patch_start_diagnostics(rls)
     patch_rls_profile_diagnostics(rls)
     patch_delivery_poi(rls)
+    patch_careermp_phone(rls)
     stage_careermp_040(client)
     patch_careermp_040_overhaul_adapter(client)
     patch_careermp_overhaul_profiles(client)
