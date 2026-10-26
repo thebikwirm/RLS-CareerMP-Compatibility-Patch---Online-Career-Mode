@@ -13,7 +13,7 @@ class RlsReadinessTests(unittest.TestCase):
         self.assertIn('mode.careerMPVehicleSafety == true', source)
         self.assertIn('FS:fileExists("/lua/ge/extensions/overhaul/shell/gameMode.lua")', source)
         self.assertIn("if not modeConfirmed then return false end", source)
-        self.assertEqual(source.count("careerMP040ReconnectHello(dtReal)"), 2)
+        self.assertEqual(source.count("careerMP040ReconnectHello(dtReal)"), 3)
         self.assertIn("reconnect negotiation hello", source)
         self.assertEqual(source.count("and not (rlsCareer and type(rlsCareer.isActive)"), 2)
         self.assertIn("TriggerServerEvent(\"careerModeReady\"", source)
