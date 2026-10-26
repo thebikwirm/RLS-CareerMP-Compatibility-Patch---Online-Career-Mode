@@ -325,3 +325,49 @@ Do not distribute these at the same time:
 - This patch is intended for online career sessions, not standalone single-player use.
 - The current combined update includes the traffic-disable fixes, workshop respawn/recovery/taxi fixes, tuning fixes, camera/drag/delivery fixes, prop cargo turn-in fix, cargo fail-safe unfreeze, drag NPC staging fix, online drag timeslip timing fix, job/freeroam save-timing guards, manual player queue/restore/resync controls, stale vehicle cleanup, grey-orb remote vehicle mitigation, RaceTab, CareerMP Tablet 0.0.5, and early BeamMP/CareerMP load-order guards. Multi-player edge cases should still be validated in a live session before calling the release fully stable.
 - Because the original RLS mod is third-party content, the recommended distribution format is **patch + build script**, not the complete repacked RLS archive.
+
+## CareerMP RLS save profile selection
+
+The patched CareerMP client creates this user config on first load:
+
+```text
+/settings/rls_careermp_profile.json
+```
+
+Default:
+
+```json
+{
+  "mode": "server",
+  "profileName": "",
+  "newProfileName": "RLS-CareerMP"
+}
+```
+
+Supported modes:
+
+- `"server"` — preserves the original CareerMP behavior and derives the save name from the BeamMP/CareerMP server configuration.
+- `"existing"` — loads the exact RLS profile named by `profileName`.
+- `"new"` — asks RLS to create-or-load the name in `newProfileName`. If that profile does not exist, RLS creates a fresh career. If a readable profile with that name already exists, RLS loads it instead. The patch never deletes or overwrites an existing save to force a fresh career.
+
+Example: use an existing RLS profile:
+
+```json
+{
+  "mode": "existing",
+  "profileName": "MyRLSCareer",
+  "newProfileName": "RLS-CareerMP"
+}
+```
+
+Example: create a new CareerMP/RLS profile:
+
+```json
+{
+  "mode": "new",
+  "profileName": "",
+  "newProfileName": "beta19west-new"
+}
+```
+
+The selected mode/profile is logged by `CareerMP-ProfileConfig` / `CareerMP-DIAG` during CareerMP startup. If `existing` or `new` is selected with a blank name, the patch safely falls back to the original server-derived profile name.
