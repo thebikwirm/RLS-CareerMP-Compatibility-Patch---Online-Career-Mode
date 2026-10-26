@@ -27,6 +27,7 @@ class PatchTests(unittest.TestCase):
         patch_legacy_paint(entries)
         content = entries[PAINT].decode()
         self.assertIn("legacy per-part paint disabled", content)
+        self.assertIn("function M.onVehicleReady(...) return nil end", content)
         self.assertNotIn("career_modules_inventory", content)
         snapshot = dict(entries)
         patch_legacy_paint(entries)
