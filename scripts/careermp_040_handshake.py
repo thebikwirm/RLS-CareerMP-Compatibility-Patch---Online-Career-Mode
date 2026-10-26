@@ -67,6 +67,22 @@ local function careerMP040RlsReady()
   return ready
 end
 
+local reconnectHelloElapsed = 0
+local function careerMP040ReconnectHello(dtReal)
+  if modeConfirmed then
+    reconnectHelloElapsed = 0
+    return
+  end
+  -- The enabler may survive a BeamMP reconnect with worldReadyState=2.
+  -- Do not rely on its old syncRequested flag to restart negotiation.
+  if worldReadyState ~= 2 or not (MPGameNetwork and MPCoreNetwork) then return end
+  reconnectHelloElapsed = reconnectHelloElapsed + (tonumber(dtReal) or 0)
+  if reconnectHelloElapsed < 8 then return end
+  reconnectHelloElapsed = 0
+  log("I", logTag, "CareerMP040 reconnect negotiation hello; awaiting server mode config")
+  TriggerServerEvent("careerModeHello", jsonEncode({ protocol = 1, mode = "overhaul" }))
+end
+
 local function sendOverhaulReady()
   if modeReadySent or not careerMPActive then return end
   local mode = type(extensions) == "table" and rawget(extensions, "overhaul_shell_gameMode")
@@ -105,6 +121,7 @@ end
         if source.count(tick) != 1:
             raise RuntimeError("Custom CareerMP update callback changed")
         source = source.replace(tick, '''local function onUpdate(dtReal, dtSim, dtRaw)
+  careerMP040ReconnectHello(dtReal)
   sendOverhaulReady()
   if not careerMP040RlsReady() then return end
   -- RLS accepts the start request before its job-based profile activation
@@ -123,7 +140,8 @@ end
         source = source.replace(leave, '''\tcareerMPActive = false
 \tsyncRequested = false
   modeConfirmed = false
-  modeReadySent = false''', 1)
+  modeReadySent = false
+  reconnectHelloElapsed = 0''', 1)
         sync = '''local function rxCareerSync(data)
 \tclientConfig = jsonDecode(data)'''
         if source.count(sync) != 1:
@@ -153,6 +171,7 @@ end
     if source.count(tick) != 1:
         raise RuntimeError("CareerMP frame callback changed")
     source = source.replace(tick, '''local function onUpdate(dtReal, dtSim, dtRaw)
+  careerMP040ReconnectHello(dtReal)
   sendOverhaulReady()
   if not careerMP040RlsReady() then return end
   -- RLS accepts the start request before its job-based profile activation
@@ -171,7 +190,8 @@ end
     source = source.replace(leave, '''\tcareerMPActive = false
 \tsyncRequested = false
   modeConfirmed = false
-  modeReadySent = false''', 1)
+  modeReadySent = false
+  reconnectHelloElapsed = 0''', 1)
     sync = '''local function rxCareerSync(data)
 \tclientConfig = jsonDecode(data)'''
     if source.count(sync) != 1:
