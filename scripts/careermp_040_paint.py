@@ -21,5 +21,8 @@ def patch_legacy_paint(entries: dict[str, bytes]) -> None:
 -- TODO: implement equivalent hooks against RLS Overhaul inventory
 -- after confirming RLS paint lifecycle and multiplayer ownership checks.
 local M = {}
+-- The CareerMP vehicle-ready dispatch invokes this method directly.
+-- Keep the API available while disabling legacy vanilla-career paint logic.
+function M.onVehicleReady(...) return nil end
 return M
 """).encode("utf-8")
