@@ -19,6 +19,15 @@ def patch_client_handshake(entries: dict[str, bytes]) -> None:
     prelude = '''-- CareerMP040 negotiated Overhaul-only session
 local modeConfirmed = false
 local modeReadySent = false
+local function rxCareerModeReadyAck(data)
+  local ok, payload = pcall(jsonDecode, data)
+  if not ok or type(payload) ~= "table" or payload.protocol ~= 1
+      or payload.mode ~= "overhaul" or payload.active ~= true then
+    log("E", logTag, "CareerMP040 received invalid ready acknowledgement")
+    return
+  end
+  log("I", logTag, "CareerMP040 server acknowledged RLS career activation")
+end
 
 -- Expose the server-negotiated state to the RLS startup guard.
 -- Unlike careerMP_compat, this only returns true after rxCareerModeConfig.
@@ -33,6 +42,7 @@ local function rxCareerModeConfig(data)
     return
   end
   modeConfirmed = true
+  log("I", logTag, "CareerMP040 mode negotiation accepted; requesting career sync")
   TriggerServerEvent("careerSyncRequested", "")
 end
 
@@ -89,7 +99,7 @@ end
         hook = '\tAddEventHandler("rxCareerSync", rxCareerSync)'
         if source.count(hook) != 1:
             raise RuntimeError("Custom CareerMP event registry changed")
-        source = source.replace(hook, '\tAddEventHandler("rxCareerModeConfig", rxCareerModeConfig)\n' + hook, 1)
+        source = source.replace(hook, '\tAddEventHandler("rxCareerModeConfig", rxCareerModeConfig)\n\tAddEventHandler("rxCareerModeReadyAck", rxCareerModeReadyAck)\n' + hook, 1)
         tick = '''local function onUpdate(dtReal, dtSim, dtRaw)
 \tprocessPendingCareerStart(dtReal)'''
         if source.count(tick) != 1:
@@ -137,7 +147,7 @@ end
     hook = '\tAddEventHandler("rxCareerSync", rxCareerSync)'
     if source.count(hook) != 1:
         raise RuntimeError("CareerMP event registration changed")
-    source = source.replace(hook, '\tAddEventHandler("rxCareerModeConfig", rxCareerModeConfig)\n' + hook, 1)
+    source = source.replace(hook, '\tAddEventHandler("rxCareerModeConfig", rxCareerModeConfig)\n\tAddEventHandler("rxCareerModeReadyAck", rxCareerModeReadyAck)\n' + hook, 1)
     tick = '''local function onUpdate(dtReal, dtSim, dtRaw)
 \tif worldReadyState ~= 2 or not clientConfig then return end'''
     if source.count(tick) != 1:
