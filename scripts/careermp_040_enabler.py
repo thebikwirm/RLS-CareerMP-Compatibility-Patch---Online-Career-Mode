@@ -8,6 +8,107 @@ import re
 
 ENABLER = "lua/ge/extensions/careerMPEnabler.lua"
 
+PROFILE_MARKER = "-- CareerMP040 configurable RLS profile selection"
+
+def patch_profile_selector(source: str) -> str:
+    """Select the local RLS profile at the final CareerMP -> RLS start call.
+
+    This intentionally patches the call boundary rather than depending on one
+    CareerMP fork's pending-profile variable names.
+    """
+    if PROFILE_MARKER in source:
+        return source
+
+    anchor = "local M = {}"
+    if source.count(anchor) != 1:
+        raise RuntimeError("CareerMP profile config: module declaration changed")
+
+    lua = r'''
+-- CareerMP040 configurable RLS profile selection
+local CAREERMP_PROFILE_CONFIG_PATH = "/settings/rls_careermp_profile.json"
+local careerMPProfileConfig = nil
+
+local function normalizeCareerMPProfileConfig(config)
+  config = type(config) == "table" and config or {}
+  local mode = tostring(config.mode or "server"):lower()
+  if mode ~= "server" and mode ~= "existing" and mode ~= "new" then
+    mode = "server"
+  end
+  return {
+    mode = mode,
+    profileName = tostring(config.profileName or ""),
+    newProfileName = tostring(config.newProfileName or "RLS-CareerMP"),
+  }
+end
+
+local function loadCareerMPProfileConfig()
+  if careerMPProfileConfig then return careerMPProfileConfig end
+
+  local ok, loaded = pcall(jsonReadFile, CAREERMP_PROFILE_CONFIG_PATH)
+  if not ok or type(loaded) ~= "table" then
+    careerMPProfileConfig = normalizeCareerMPProfileConfig(nil)
+    local wrote, err = pcall(jsonWriteFile, CAREERMP_PROFILE_CONFIG_PATH, careerMPProfileConfig, true)
+    if wrote then
+      log("I", "CareerMP-ProfileConfig", "Created default profile config at " .. CAREERMP_PROFILE_CONFIG_PATH)
+    else
+      log("E", "CareerMP-ProfileConfig", "Unable to write profile config: " .. tostring(err))
+    end
+  else
+    careerMPProfileConfig = normalizeCareerMPProfileConfig(loaded)
+  end
+
+  return careerMPProfileConfig
+end
+
+local function resolveConfiguredCareerMPProfile(serverProfile)
+  local config = loadCareerMPProfileConfig()
+  local selected = tostring(serverProfile or "")
+  local selectedMode = "server"
+
+  if config.mode == "existing" and config.profileName ~= "" then
+    selected = config.profileName
+    selectedMode = "existing"
+  elseif config.mode == "new" and config.newProfileName ~= "" then
+    selected = config.newProfileName
+    selectedMode = "new"
+  elseif config.mode ~= "server" then
+    selectedMode = "server-fallback"
+    log("W", "CareerMP-ProfileConfig",
+      "Configured " .. tostring(config.mode) .. " profile name is blank; using server profile " .. selected)
+  end
+
+  log("I", "CareerMP-ProfileConfig",
+    "career profile selected mode=" .. selectedMode ..
+    " profile=" .. selected ..
+    " serverProfile=" .. tostring(serverProfile))
+  return selected
+end
+'''
+    source = source.replace(anchor, anchor + "\n" + lua, 1)
+
+    # Wrap every final CareerMP compatibility call. The current experimental
+    # source has retry/direct-start variants, so there may be more than one.
+    call = re.compile(
+        r'(compat\.createOrLoadCareerAndStart\()\s*([^,\n]+)(\s*,)'
+    )
+    source, count = call.subn(
+        lambda m: m.group(1)
+        + (
+            m.group(2)
+            if "resolveConfiguredCareerMPProfile" in m.group(2)
+            else "resolveConfiguredCareerMPProfile(" + m.group(2).strip() + ")"
+        )
+        + m.group(3),
+        source,
+    )
+    if count < 1:
+        raise RuntimeError(
+            "CareerMP profile config: no compat.createOrLoadCareerAndStart call found"
+        )
+
+    return source
+
+
 def patch_overhaul_activation_flow(entries: dict[str, bytes]) -> None:
     if ENABLER not in entries:
         raise RuntimeError("Missing CareerMP enabler")
@@ -58,7 +159,8 @@ local careerMP040Protection = {
             'extensions and extensions["career_career"] or career_career',
             'extensions and extensions["overhaul_career_career"]',
         )
-        entries[ENABLER] = source.encode("utf-8")
+        source = patch_profile_selector(source)
+    entries[ENABLER] = source.encode("utf-8")
         return
 
     guard = re.compile(
