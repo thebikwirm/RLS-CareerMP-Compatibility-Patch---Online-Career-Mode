@@ -82,6 +82,35 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(z.read("patched.lua"), b"new")
             self.assertEqual(z.read("other/file-1.txt"), b"value1")
 
+    def test_rls_allows_only_known_new_phone_assets(self):
+        full = self.server / "Resources" / "Client" / "rls_career_overhaul_v2.8.0_beta.zip"
+        entries = {f"other/file-{i}.txt": f"value{i}" for i in range(12)}
+        entries["patched.lua"] = "old"
+        make_zip(full, entries)
+        overlay = self.build / "RLS-OVERLAY-ONLY"
+        (overlay / "gameplay/overhaul/phone/apps").mkdir(parents=True)
+        (overlay / "ui/ui-vue/mods/careermp/phone").mkdir(parents=True)
+        (overlay / "patched.lua").write_text("new")
+        (overlay / "gameplay/overhaul/phone/apps/careermp-online.json").write_text('{"id":"careermp-online"}')
+        (overlay / "ui/ui-vue/mods/careermp/phone/CareerMPHome.vue").write_text("<template/>")
+        result = self.run_deploy("--patch-rls")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(full) as z:
+            self.assertEqual(z.read("patched.lua"), b"new")
+            self.assertEqual(z.read("gameplay/overhaul/phone/apps/careermp-online.json"), b'{"id":"careermp-online"}')
+            self.assertEqual(z.read("ui/ui-vue/mods/careermp/phone/CareerMPHome.vue"), b"<template/>")
+
+    def test_rls_unknown_new_assets_rejected(self):
+        full = self.server / "Resources" / "Client" / "rls_career_overhaul_v2.8.0_beta.zip"
+        entries = {f"other/file-{i}.txt": f"value{i}" for i in range(12)}
+        make_zip(full, entries)
+        overlay = self.build / "RLS-OVERLAY-ONLY"
+        overlay.mkdir()
+        (overlay / "unapproved.lua").write_text("wrong")
+        result = self.run_deploy("--patch-rls")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.old_lua.read_text(), "old-server")
+
     def test_slim_rls_target_rejected(self):
         full = self.server / "Resources" / "Client" / "rls_career_overhaul_v2.8.0_beta.zip"
         make_zip(full, {"patched.lua": "old"})
