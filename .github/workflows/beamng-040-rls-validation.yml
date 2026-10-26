@@ -45,6 +45,8 @@ jobs:
 
       - name: Test RLS career startup diagnostic instrumentation
         run: python -m unittest discover -s tests -p 'test_rls_280_start_diagnostics.py' -v
+      - name: Test RLS multiplayer Save Career pause action
+        run: python -m unittest discover -s tests -p 'test_rls_280_careermp_save.py' -v
       - name: Check RLS CareerMP phone manifest staging
         run: python -m unittest discover -s tests -p 'test_rls_280_careermp_phone.py' -v
       - name: Test vanilla delivery POI lifecycle guard
