@@ -10,6 +10,8 @@ class CareerMPPhoneTests(unittest.TestCase):
         app = json.loads(entries[MANIFEST])
         self.assertEqual(app["id"], "careermp-online")
         self.assertEqual(app["component"], "/" + COMPONENT)
+        self.assertEqual(app["defaultHome"], {"slot": 15, "required": True})
+        self.assertNotIn("unlock", app)
         self.assertIn(b"<template>", entries[COMPONENT])
         self.assertIn(b"CareerMP", entries[COMPONENT])
         self.assertIn(b"overhaul_shell_gameMode.save()", entries[COMPONENT])
