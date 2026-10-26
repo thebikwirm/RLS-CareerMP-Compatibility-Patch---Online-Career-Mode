@@ -97,6 +97,14 @@ end
         source = source.replace(tick, '''local function onUpdate(dtReal, dtSim, dtRaw)
   sendOverhaulReady()
   if not careerMP040RlsReady() then return end
+  -- RLS accepts the start request before its job-based profile activation
+  -- completes. Do not invoke CareerMP's retry worker during that interval.
+  local rlsMode = type(extensions) == "table" and rawget(extensions, "overhaul_shell_gameMode")
+  local rlsCareer = type(extensions) == "table" and rawget(extensions, "overhaul_career_career")
+  if rlsMode and type(rlsMode.isActive) == "function" and rlsMode.isActive()
+      and not (rlsCareer and type(rlsCareer.isActive) == "function" and rlsCareer.isActive()) then
+    return
+  end
 \tprocessPendingCareerStart(dtReal)''', 1)
         leave = '''\tcareerMPActive = false
 \tsyncRequested = false'''
@@ -137,6 +145,14 @@ end
     source = source.replace(tick, '''local function onUpdate(dtReal, dtSim, dtRaw)
   sendOverhaulReady()
   if not careerMP040RlsReady() then return end
+  -- RLS accepts the start request before its job-based profile activation
+  -- completes. Do not invoke CareerMP's retry worker during that interval.
+  local rlsMode = type(extensions) == "table" and rawget(extensions, "overhaul_shell_gameMode")
+  local rlsCareer = type(extensions) == "table" and rawget(extensions, "overhaul_career_career")
+  if rlsMode and type(rlsMode.isActive) == "function" and rlsMode.isActive()
+      and not (rlsCareer and type(rlsCareer.isActive) == "function" and rlsCareer.isActive()) then
+    return
+  end
 \tif worldReadyState ~= 2 or not clientConfig then return end''', 1)
     leave = '''\tcareerMPActive = false
 \tsyncRequested = false'''
