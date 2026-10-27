@@ -103,6 +103,10 @@ local function careerMP040ReconnectHello(dtReal)
   reconnectHelloElapsed = reconnectHelloElapsed + (tonumber(dtReal) or 0)
   if reconnectHelloElapsed < 8 then return end
   reconnectHelloElapsed = 0
+  log("I", logTag, "CareerMP040 hello send: worldReady=" .. tostring(worldReadyState)
+    .. " MPGameNetwork=" .. type(MPGameNetwork)
+    .. " MPCoreNetwork=" .. type(MPCoreNetwork)
+    .. " TriggerServerEvent=" .. type(TriggerServerEvent))
   log("I", logTag, "CareerMP040 reconnect negotiation hello; awaiting server mode config")
   TriggerServerEvent("careerModeHello", jsonEncode({ protocol = 1, mode = "overhaul" }))
 end
