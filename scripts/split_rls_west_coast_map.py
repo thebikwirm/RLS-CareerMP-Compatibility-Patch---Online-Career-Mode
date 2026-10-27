@@ -1,13 +1,12 @@
-"""Split a FULL deployed RLS West Coast level into a standalone BeamMP map ZIP.
+"""Copy the RLS West Coast level into an additional standalone BeamMP map ZIP.
 
-Run AFTER build.bat has patched the full installed RLS ZIP. Dry-run by default.
+The original full RLS ZIP remains unchanged. Dry-run by default.
 Requires a real, user-reviewed info.json from a compatible level, rather
 than fabricating BeamNG level metadata.
 """
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -35,7 +34,7 @@ def checked_names(path: Path) -> list[str]:
         return names
 
 
-def generate(source: Path, info: Path, output: Path) -> tuple[Path, Path, int]:
+def generate(source: Path, info: Path, output: Path) -> tuple[Path, int]:
     names = checked_names(source)
     level_names = [n for n in names if n.startswith(LEVEL) and not n.endswith("/")]
     if not level_names:
@@ -51,17 +50,14 @@ def generate(source: Path, info: Path, output: Path) -> tuple[Path, Path, int]:
 
     output.mkdir(parents=True, exist_ok=True)
     map_zip = output / MAP_NAME
-    core_zip = output / RLS_NAME
-    with zipfile.ZipFile(source, "r") as inp, \
-            zipfile.ZipFile(map_zip, "w") as level_out, \
-            zipfile.ZipFile(core_zip, "w") as core_out:
+    with zipfile.ZipFile(source, "r") as inp, zipfile.ZipFile(map_zip, "w") as level_out:
         for entry in inp.infolist():
-            dest = level_out if entry.filename.startswith(LEVEL) else core_out
-            dest.writestr(entry, inp.read(entry.filename))
+            if entry.filename.startswith(LEVEL):
+                level_out.writestr(entry, inp.read(entry.filename))
         level_out.writestr(INFO, payload, compress_type=zipfile.ZIP_DEFLATED)
-    if INFO not in checked_names(map_zip) or INFO in checked_names(core_zip):
+    if INFO not in checked_names(map_zip):
         raise RuntimeError("Split validation failed")
-    return map_zip, core_zip, len(level_names)
+    return map_zip, len(level_names)
 
 
 def main() -> None:
@@ -70,7 +66,7 @@ def main() -> None:
     p.add_argument("--info-json", type=Path, required=True,
                    help="Reviewed, compatible info.json to add to RLS map")
     p.add_argument("--install", action="store_true",
-                   help="Replace full RLS ZIP and install map ZIP with timestamped backups")
+                   help="Install additional map ZIP without touching the original RLS ZIP")
     args = p.parse_args()
     client = args.server_root / "Resources" / "Client"
     source = client / RLS_NAME
@@ -83,38 +79,25 @@ def main() -> None:
     if map_dest.exists():
         p.error(f"Target already exists: {map_dest}; move it aside first")
     with tempfile.TemporaryDirectory(prefix="rls-map-split-") as temp:
-        map_zip, core_zip, count = generate(source, args.info_json, Path(temp))
+        map_zip, count = generate(source, args.info_json, Path(temp))
         print(f"Prepared {MAP_NAME}: {count} map files plus {INFO}")
-        print(f"Prepared {RLS_NAME}: all non-{LEVEL} entries retained")
+        print(f"Original {RLS_NAME} remains unchanged")
         if not args.install:
             print("DRY RUN: no server files changed. Add --install after reviewing info.json.")
             return
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup = args.server_root / "rls-map-split-backups" / stamp
-        backup.mkdir(parents=True, exist_ok=False)
-        saved = backup / RLS_NAME
-        shutil.copy2(source, saved)
-        if saved.stat().st_size != source.stat().st_size or checked_names(saved) != checked_names(source):
-            raise RuntimeError("Backup verification failed")
+        fd, temp_name = tempfile.mkstemp(prefix=".rls-map-", suffix=".zip", dir=client)
+        os.close(fd)
         try:
-            # Files staged on same volume for atomic individual swaps.
-            for prepared, destination in ((map_zip, map_dest), (core_zip, source)):
-                fd, temp_name = tempfile.mkstemp(prefix=".rls-split-", suffix=".zip", dir=client)
-                os.close(fd)
-                try:
-                    shutil.copy2(prepared, temp_name)
-                    checked_names(Path(temp_name))
-                    os.replace(temp_name, destination)
-                finally:
-                    Path(temp_name).unlink(missing_ok=True)
-        except Exception:
-            shutil.copy2(saved, source)
-            map_dest.unlink(missing_ok=True)
-            raise
-        print(f"Installed {map_dest} and updated {source}")
-        print(f"Original full ZIP backup: {saved}")
+            shutil.copy2(map_zip, temp_name)
+            checked_names(Path(temp_name))
+            os.replace(temp_name, map_dest)
+        finally:
+            Path(temp_name).unlink(missing_ok=True)
+        print(f"Installed additional map resource: {map_dest}")
+        print(f"Original full RLS ZIP unchanged: {source}")
         print("Keep the server Map path /levels/rls_west_coast/info.json and restart server.")
-        print("NOTE: subsequent build.bat RLS deployments can restore level files; rerun this split then.")
+        print("NOTE: the duplicate map paths across two ZIPs may still cause VFS conflicts.")
+
 
 
 if __name__ == "__main__":
