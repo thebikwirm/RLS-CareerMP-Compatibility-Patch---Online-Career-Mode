@@ -1,0 +1,13 @@
+{
+  "title": "RLS West Coast USA",
+  "description": "West Coast USA level for RLS Career Overhaul multiplayer",
+  "authors": "RLS Modding / BeamNG",
+  "country": "levels.common.country.usa",
+  "region": "northAmerica",
+  "roadRules": {
+    "rightHandDrive": false,
+    "turnOnRed": true
+  },
+  "supportsTraffic": true,
+  "supportsTimeOfDay": true
+}
