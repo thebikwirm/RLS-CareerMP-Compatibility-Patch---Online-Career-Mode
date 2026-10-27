@@ -2,12 +2,12 @@
 setlocal
 cd /d "%~dp0"
 
-rem Standalone RLS West Coast map exporter. Does NOT run build.bat or alter full RLS.
+rem Creates metadata-only RLS West Coast ZIP. Does not alter full RLS.
 set "SERVER=D:\beamng_server"
 set "INFO=%~dp0rls-map-info.json"
 
 echo ==========================================
-echo  RLS WEST COAST MAP RESOURCE EXPORT
+echo  RLS WEST COAST INFO.JSON ZIP EXPORT
 echo ==========================================
 echo.
 echo Server: %SERVER%
@@ -39,9 +39,9 @@ if errorlevel 1 goto :fail
 
 echo.
 echo Source check passed. The full RLS ZIP will NOT be modified.
-echo The new map ZIP will contain duplicate level assets from RLS.
+echo The new ZIP contains ONLY levels/rls_west_coast/info.json.
 echo.
-choice /C YN /N /M "Install additional rls_west_coast.zip to server Resources\Client? [Y/N]: "
+choice /C YN /N /M "Install rls_west_coast_info.zip to server Resources\Client? [Y/N]: "
 if errorlevel 2 goto :cancel
 if errorlevel 1 goto :install
 goto :cancel
@@ -50,7 +50,7 @@ goto :cancel
 python "%~dp0scripts\split_rls_west_coast_map.py" --server-root "%SERVER%" --info-json "%INFO%" --install
 if errorlevel 1 goto :fail
 echo.
-echo Map ZIP installed. Restart the BeamMP server to test.
+echo Metadata ZIP installed. Restart the BeamMP server to test.
 pause
 exit /b 0
 
