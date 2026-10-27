@@ -41,8 +41,11 @@ def generate(source: Path, info: Path, output: Path) -> tuple[Path, int]:
         raise RuntimeError(f"{source} has no {LEVEL} entries; was map already split?")
     if INFO in names:
         raise RuntimeError(f"{INFO} already exists; review instead of overwriting metadata")
-    if LEVEL + "main.level.lua" not in level_names:
-        raise RuntimeError("Expected RLS level main.level.lua is missing")
+    # RLS level archives can use different root layouts; BeamNG\'s metadata
+    # requirement does not imply that main.level.lua must be at this path.
+    # Validate the archive has substantial map content instead.
+    if not any(n.startswith(LEVEL + "art/") for n in level_names):
+        raise RuntimeError("RLS level art/ assets missing; verify the source archive")
     obj = json.loads(info.read_text(encoding="utf-8-sig"))
     if not isinstance(obj, dict):
         raise RuntimeError("info.json template must contain a JSON object")
