@@ -67,15 +67,39 @@ local function careerMP040RlsReady()
   return ready
 end
 
+-- The old worldReadyState can survive a connection reset. Require a
+-- real level mission to exist before resending negotiation. In particular,
+-- 248+ BeamMP resources may take minutes to activate before the map loads.
+local function careerMP040MissionLoaded()
+  if worldReadyState ~= 2 or not (MPGameNetwork and MPCoreNetwork) then return false end
+  if type(getMissionFilename) ~= "function" then return false end
+  local ok, mission = pcall(getMissionFilename)
+  if not ok or type(mission) ~= "string" or mission == "" then return false end
+  if not mission:match("^/?levels/[^/]+/") then return false end
+  return FS and type(FS.fileExists) == "function" and FS:fileExists(mission)
+end
+
 local reconnectHelloElapsed = 0
+local reconnectWaitLogged = false
 local function careerMP040ReconnectHello(dtReal)
   if modeConfirmed then
     reconnectHelloElapsed = 0
+    reconnectWaitLogged = false
     return
   end
-  -- The enabler may survive a BeamMP reconnect with worldReadyState=2.
-  -- Do not rely on its old syncRequested flag to restart negotiation.
-  if worldReadyState ~= 2 or not (MPGameNetwork and MPCoreNetwork) then return end
+  -- A stale worldReadyState is not proof BeamMP finished resource sync.
+  if not careerMP040MissionLoaded() then
+    reconnectHelloElapsed = 0
+    if not reconnectWaitLogged then
+      log("I", logTag, "CareerMP040 holding retry hello until BeamMP level mission is mounted")
+      reconnectWaitLogged = true
+    end
+    return
+  end
+  if reconnectWaitLogged then
+    log("I", logTag, "CareerMP040 level mission available; retry hello re-enabled")
+    reconnectWaitLogged = false
+  end
   reconnectHelloElapsed = reconnectHelloElapsed + (tonumber(dtReal) or 0)
   if reconnectHelloElapsed < 8 then return end
   reconnectHelloElapsed = 0
