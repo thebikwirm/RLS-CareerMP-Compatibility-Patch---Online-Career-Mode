@@ -15,7 +15,7 @@ def patch_server(source: str) -> str:
     register = '\tMP.RegisterEvent("careerSyncRequested","careerSyncRequested")'
     if source.count(register) != 1:
         raise RuntimeError("CareerMP server sync registration changed")
-    source = source.replace(register, register + '\n\t' + EVENT_START + '\n\t' + EVENT_READY, 1)
+    source = source.replace(register, register + '\n\t' + EVENT_START + '\n\t' + EVENT_READY + '\n\tprint("[CareerMP040-DIAG] event registration executed: careerModeHello, careerModeReady")', 1)
 
     old = '''function careerSyncRequested(player_id)
 \tMP.TriggerClientEventJson(player_id, "rxCareerSync", Config.client)
@@ -30,6 +30,7 @@ end'''
 local supportedCareerModes = { overhaul = true }
 
 function careerModeHello(player_id, data)
+  print("[CareerMP040-DIAG] raw hello event received player=" .. tostring(player_id) .. " dataType=" .. type(data))
   local entry = pendingActivation[player_id]
   print("[CareerMP040-DIAG] hello player=" .. tostring(player_id) .. " pending=" .. tostring(entry ~= nil) .. " connected=" .. tostring(MP.IsPlayerConnected(player_id)))
   if not entry or not MP.IsPlayerConnected(player_id) then return end
